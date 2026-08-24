@@ -1,0 +1,38 @@
+forward_kinematics_node:
+  ros__parameters:
+    motor_data_topic: "/ired/motor/data"
+    robot_speed_topic: "/ired/speed"
+    wheel_seperation: 0.22
+    rpm_to_mps: 0.00680678
+
+inverse_kinematics_node:
+  ros__parameters:
+    cmd_vel_topic: "/cmd_vel"
+    motor_control_topic: "/ired/motor/speed_control"
+    wheel_seperation: 0.22
+    mps_to_rpm: 146.912
+
+imu_node:
+  ros__parameters:
+    imu_raw_topic: "/ired/imu/raw"
+    imu_data_topic: "/ired/imu/data"
+    rpy_topic: "/ired/imu/rollpitchyaw"
+
+odom_node:
+  ros__parameters:
+    odom_topic: "/odom"
+    joint_state_topic: "/joint_states"
+    motor_data_topic: "/ired/motor/data"
+    rpy_topic: "/ired/imu/rollpitchyaw"
+    robot_speed_topic: "/ired/speed"
+    odom_tf_publish: true
+    rpm_to_mps: 0.00680678
+    wheel_radius: 0.065
+
+iredcr_modbus_node:
+  ros__parameters:
+    imu_raw_topic: "/ired/imu/raw"
+    motor_control_topic: "/ired/motor/speed_control"
+    motor_data_topic: "/ired/motor/data"
+    port: "/dev/ttyMicro"
+    baud: 115200

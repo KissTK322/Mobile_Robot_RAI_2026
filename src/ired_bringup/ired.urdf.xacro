@@ -1,0 +1,66 @@
+<?xml version="1.0"?>
+<robot name="IRED">
+    <!-- link -->
+    <link name="base_footprint"/>
+    <link name="base_link"/>
+    <link name="wheel_front_left_link"/>
+    <link name="wheel_front_right_link"/>
+    <link name="wheel_rear_left_link"/>
+    <link name="wheel_rear_right_link"/>
+    <link name="base_scan"/>
+    <link name="aruco_camera_link"/>
+    <link name="base_cartesian_link"/>
+    
+   <!-- joint -->
+    <joint name="base_joint" type="fixed">
+        <parent link="base_footprint"/>
+        <child link="base_link"/>
+        <origin xyz="0.0 0.0 0.11" rpy="0.0 0.0 0.0"/>
+    </joint>
+
+    <joint name="scan_joint" type="fixed">
+        <parent link="base_link"/>
+        <child link="base_scan"/>
+        <origin xyz="0.0 0.0 0.285" rpy="0.0 0.0 0.0"/>
+    </joint>
+
+    <joint name="aruco_camera_joint" type="fixed">
+        <parent link="base_link"/>
+        <child link="aruco_camera_link"/>
+        <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    </joint>
+
+    <joint name="base_cartesian_joint" type="fixed">
+        <parent link="base_link"/>
+        <child link="base_cartesian_link"/>
+        <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    </joint>
+
+    <joint name="wheel_front_right_joint" type="continuous">
+        <parent link="base_link"/>
+        <child link="wheel_front_right_link"/>
+        <axis xyz="0 0 1"/>
+        <origin xyz="0.156 0.156 -0.045" rpy="0.0 0.0 0.0"/>
+    </joint>
+
+    <joint name="wheel_front_left_joint" type="continuous">
+        <parent link="base_link"/>
+        <child link="wheel_front_left_link"/>
+        <axis xyz="0 0 1"/>
+        <origin xyz="0.156 -0.156 -0.045" rpy="0.0 0.0 0.0"/>
+    </joint>
+
+    <joint name="wheel_rear_right_joint" type="continuous">
+        <parent link="base_link"/>
+        <child link="wheel_rear_right_link"/>
+        <axis xyz="0 0 1"/>
+        <origin xyz="-0.156 0.156 -0.045" rpy="0.0 0.0 0.0"/>
+    </joint>
+
+    <joint name="wheel_rear_left_joint" type="continuous">
+        <parent link="base_link"/>
+        <child link="wheel_rear_left_link"/>
+        <axis xyz="0 0 1"/>
+        <origin xyz="-0.156 -0.156 -0.045" rpy="0.0 0.0 0.0"/>
+    </joint>
+</robot>

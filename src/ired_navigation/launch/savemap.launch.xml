@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+  <arg name="map_name" default="map"/>
+
+  <!-- Map Saver Node -->
+  <node pkg="nav2_map_server" exec="map_saver_cli" name="map_saver_node" output="screen"
+        args="-f $(find-pkg-share ired_navigation)/maps/$(var map_name)" />
+
+</launch>

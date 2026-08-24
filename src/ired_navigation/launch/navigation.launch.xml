@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+
+  <arg name="map_name" default="map.yaml"/>
+  <arg name="param_name" default="navigation.yaml"/>
+  <arg name="use_sim_time" default="false"/>
+  <arg name="use_composition" default="True"/>
+  <arg name="autostart" default="true"/>
+
+  <!-- Include Nav2 bringup -->
+  <include file="$(find-pkg-share nav2_bringup)/launch/bringup_launch.py">
+    <arg name="map" value="$(find-pkg-share ired_navigation)/maps/$(var map_name)"/>
+    <arg name="params_file" value="$(find-pkg-share ired_navigation)/param/$(var param_name)"/>
+    <arg name="use_sim_time" value="$(var use_sim_time)"/>
+    <arg name="use_composition" value="$(var use_composition)"/>
+    <arg name="autostart" value="$(var autostart)"/>
+  </include>
+
+</launch>
