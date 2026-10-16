@@ -9,7 +9,8 @@
     <link name="base_scan"/>
     <link name="aruco_camera_link"/>
     <link name="base_cartesian_link"/>
-    
+    <link name="imu_link"/>
+
     <joint name="base_joint" type="fixed">
         <parent link="base_footprint"/>
         <child link="base_link"/>
@@ -31,6 +32,12 @@
     <joint name="base_cartesian_joint" type="fixed">
         <parent link="base_link"/>
         <child link="base_cartesian_link"/>
+        <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    </joint>
+
+    <joint name="imu_joint" type="fixed">
+        <parent link="base_link"/>
+        <child link="imu_link"/>
         <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
     </joint>
 

@@ -46,6 +46,16 @@ class IMU(Node):
     def initial_variables(self):
         self.imu_data = Imu()
         self.imu_data.header.frame_id = "imu_link"
+        # Covariances for the EKF: only yaw / yaw rate are trusted, roll and pitch are not measured
+        self.imu_data.orientation_covariance = [1e6, 0.0, 0.0,
+                                                0.0, 1e6, 0.0,
+                                                0.0, 0.0, 0.01]
+        self.imu_data.angular_velocity_covariance = [1e6, 0.0, 0.0,
+                                                     0.0, 1e6, 0.0,
+                                                     0.0, 0.0, 0.001]
+        self.imu_data.linear_acceleration_covariance = [0.1, 0.0, 0.0,
+                                                        0.0, 0.1, 0.0,
+                                                        0.0, 0.0, 0.1]
         self.rpy_data = IMUData()
         self.rpy_data.roll = 0.0
         self.rpy_data.pitch = 0.0
