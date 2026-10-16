@@ -41,3 +41,8 @@ iredcr_modbus_node:
     motor_data_topic: "/ired/motor/data"
     port: "/dev/ttyMicro"
     baud: 115200
+    # Wheel PID [kp, ki, kd], tuned 2026-10-16 with the wheels lifted (old: FL/RL 6.2 0.88 0.03, FR/RR 7.0 1.05 0.05)
+    pid_fl: [6.0, 35.0, 0.05]
+    pid_fr: [6.0, 35.0, 0.05]
+    pid_rl: [6.0, 35.0, 0.05]
+    pid_rr: [6.0, 35.0, 0.05]

@@ -52,6 +52,11 @@ class IREDController(Node):
         self.declare_parameter('motor_data_topic', '/ired/motor/data')
         self.declare_parameter('port', '/dev/ttyMicro')
         self.declare_parameter('baud', 115200)
+        # Wheel PID gains [kp, ki, kd] written to the controller at startup; all zeros = keep the controller's own
+        self.declare_parameter('pid_fl', [0.0, 0.0, 0.0])
+        self.declare_parameter('pid_fr', [0.0, 0.0, 0.0])
+        self.declare_parameter('pid_rl', [0.0, 0.0, 0.0])
+        self.declare_parameter('pid_rr', [0.0, 0.0, 0.0])
         
         # ROS Parameters
         self.imu_raw_topic = self.get_parameter('imu_raw_topic').get_parameter_value().string_value
@@ -59,6 +64,12 @@ class IREDController(Node):
         self.motor_data_topic = self.get_parameter('motor_data_topic').get_parameter_value().string_value
         self.serial_port = self.get_parameter('port').get_parameter_value().string_value
         self.serial_baud = self.get_parameter('baud').get_parameter_value().integer_value
+        self.pid_startup = {
+            "FL": list(self.get_parameter('pid_fl').get_parameter_value().double_array_value),
+            "FR": list(self.get_parameter('pid_fr').get_parameter_value().double_array_value),
+            "RL": list(self.get_parameter('pid_rl').get_parameter_value().double_array_value),
+            "RR": list(self.get_parameter('pid_rr').get_parameter_value().double_array_value),
+        }
     
     def initial_variables(self):
         self.imu_raw_msg = Twist()
@@ -71,6 +82,11 @@ class IREDController(Node):
         self.pid_tuning_check = False
         self.pid_tuning_motor = ""
         self.pid_tuning_value = [0.0, 0.0, 0.0]
+        # Startup PID gains from parameters: sent one wheel per cycle once the controller
+        # has finished its IMU calibration, then checked against the read-back values
+        self.start_time = self.get_clock().now()
+        self.pid_startup_queue = [m for m, g in self.pid_startup.items() if len(g) == 3 and any(g)]
+        self.pid_startup_tries = {m: 0 for m in self.pid_startup_queue}
     
     def commandIMUResetCallback(self, request, response):
         self.get_logger().info("iRED Controller : Start Calibration of MP9250...")
@@ -247,8 +263,32 @@ class IREDController(Node):
 
         return self.modbusSendData(self.pid_tuning_value, pid_starting_addr, 3)
 
+    def startupPIDStep(self, time_now):
+        if not self.pid_startup_queue or self.pid_tuning_check or not self.pid_update_check:
+            return
+        if (time_now - self.start_time).nanoseconds / 1e9 < 3.0:
+            return
+        current = {"FL": self.motor_data_msg.pid_motor_front_left, "FR": self.motor_data_msg.pid_motor_front_right,
+                   "RL": self.motor_data_msg.pid_motor_rear_left, "RR": self.motor_data_msg.pid_motor_rear_right}
+        motor = self.pid_startup_queue[0]
+        gains = self.pid_startup[motor]
+        if all(abs(a - b) < 1e-3 for a, b in zip(current[motor], gains)):
+            # Already right (each write stalls the controller ~1 s, so skip it when possible)
+            self.pid_startup_queue.pop(0)
+            state = "set from parameters" if self.pid_startup_tries[motor] else "already matches parameters"
+            self.get_logger().info(f"iRED Controller : PID {motor} {state} Kp: {gains[0]} Ki: {gains[1]} Kd: {gains[2]}")
+        elif self.pid_startup_tries[motor] >= 3:
+            self.pid_startup_queue.pop(0)
+            self.get_logger().warn(f"iRED Controller : Cannot set PID {motor} from parameters")
+        else:
+            self.pid_startup_tries[motor] += 1
+            self.pid_tuning_motor = motor
+            self.pid_tuning_value = list(gains)
+            self.pid_tuning_check = True
+
     def update_callback(self):
         time_now = self.get_clock().now()
+        self.startupPIDStep(time_now)
         
         # Zero if time out
         if (time_now - self.last_time_cmd_vel).nanoseconds / 1e9 > 1.0:
@@ -288,6 +328,7 @@ class IREDController(Node):
         if self.pid_tuning_check:
             self.PIDTuningModbus()
             self.pid_tuning_check = False
+            self.pid_update_check = False  # read the gains back from the controller next cycle
             self.get_logger().info(
                 f"PID {self.pid_tuning_motor} Kp: {self.pid_tuning_value[0]} Ki: {self.pid_tuning_value[1]} Kd: {self.pid_tuning_value[2]}"
             )
