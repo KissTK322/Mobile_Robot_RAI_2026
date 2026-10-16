@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import math
 import rclpy
 from rclpy.node import Node
 
@@ -69,9 +70,11 @@ class FORWARDKINEMATICS(Node):
         w_rr_mps = w_rr * self.rpm_to_mps
 
         R = self.wheel_seperation
+        # X-omni: inverse kinematics uses 1/sqrt(2) per wheel, so the exact inverse is sqrt(2)/4
+        k = math.sqrt(2) / 4.0
 
-        v_x = 0.5 * (w_fl_mps - w_fr_mps + w_rl_mps - w_rr_mps) * -1.0
-        v_y = 0.5 * (-w_fl_mps - w_fr_mps + w_rl_mps + w_rr_mps) * -1.0
+        v_x = k * (w_fl_mps - w_fr_mps + w_rl_mps - w_rr_mps) * -1.0
+        v_y = k * (-w_fl_mps - w_fr_mps + w_rl_mps + w_rr_mps) * -1.0
         omega = (-1.0 / (4.0 * R)) * (w_fl_mps + w_fr_mps + w_rl_mps + w_rr_mps) * -1.0
 
         self.robot_speed.twist.linear.x = v_x
