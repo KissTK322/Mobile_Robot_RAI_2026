@@ -20,12 +20,12 @@ imu_node:
 
 odom_node:
   ros__parameters:
-    odom_topic: "/odom"
+    odom_topic: "/wheel_odom"
     joint_state_topic: "/joint_states"
     motor_data_topic: "/ired/motor/data"
     rpy_topic: "/ired/imu/rollpitchyaw"
     robot_speed_topic: "/ired/speed"
-    odom_tf_publish: true
+    odom_tf_publish: false
     rpm_to_mps: 0.00680678
     wheel_radius: 0.065
 

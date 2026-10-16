@@ -25,7 +25,7 @@
     <joint name="aruco_camera_joint" type="fixed">
         <parent link="base_link"/>
         <child link="aruco_camera_link"/>
-        <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+        <origin xyz="0.0 0.0 0.335" rpy="0.0 0.0 0.0"/>
     </joint>
 
     <joint name="base_cartesian_joint" type="fixed">

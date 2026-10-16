@@ -1,12 +1,10 @@
 import os
-
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, LogInfo, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, Command
 from launch_ros.actions import Node
-
 def generate_launch_description():
     param_dir = LaunchConfiguration(
         'param_dir',
@@ -17,9 +15,15 @@ def generate_launch_description():
     laser_param_dir = LaunchConfiguration(
         'laser_param_dir',
         default=os.path.join(
-           get_package_share_directory('ired_bringup'),
+            get_package_share_directory('ired_bringup'),
             'param',
             'laser_config.yaml'))
+    ekf_param_dir = LaunchConfiguration(
+        'ekf_param_dir',
+        default=os.path.join(
+            get_package_share_directory('ired_bringup'),
+            'param',
+            'ekf.yaml'))
     urdf_file = os.path.join(
         get_package_share_directory('ired_bringup'),
         'urdf',
@@ -35,6 +39,14 @@ def generate_launch_description():
             'param_dir',
             default_value=param_dir,
             description='Specifying parameter direction'),
+        DeclareLaunchArgument(
+            'laser_param_dir',
+            default_value=laser_param_dir,
+            description='Specifying laser filter parameter direction'),
+        DeclareLaunchArgument(
+            'ekf_param_dir',
+            default_value=ekf_param_dir,
+            description='Specifying EKF parameter direction'),
         Node(
             package='robot_state_publisher',
             executable='robot_state_publisher',
@@ -78,6 +90,12 @@ def generate_launch_description():
         Node(
             package='laser_filters',
             executable='scan_to_scan_filter_chain',
-            parameters=[param_dir],
+            parameters=[laser_param_dir],
+            output='screen'),
+        Node(
+            package='robot_localization',
+            executable='ekf_node',
+            name='ekf_filter_node',
+            parameters=[ekf_param_dir],
             output='screen')
     ])

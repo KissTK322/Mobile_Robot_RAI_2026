@@ -1,0 +1,41 @@
+scan_to_scan_filter_chain:
+  ros__parameters:
+    filter1:
+      name: range
+      type: laser_filters/LaserScanRangeFilter
+      params:
+        use_message_range_limits: false
+        lower_threshold: 0.25
+        upper_threshold: .inf
+        lower_replacement_value: .nan
+        upper_replacement_value: .inf
+    filter2:
+      name: angle_filter_1a
+      type: laser_filters/LaserScanAngularBoundsFilterInPlace
+      params:
+        lower_angle: -2.3847
+        upper_angle: -2.3298
+    filter3:
+      name: angle_filter_1b
+      type: laser_filters/LaserScanAngularBoundsFilterInPlace
+      params:
+        lower_angle: -2.3237
+        upper_angle: -2.2863
+    filter4:
+      name: angle_filter_2
+      type: laser_filters/LaserScanAngularBoundsFilterInPlace
+      params:
+        lower_angle: -0.8161
+        upper_angle: -0.6741
+    filter5:
+      name: angle_filter_3
+      type: laser_filters/LaserScanAngularBoundsFilterInPlace
+      params:
+        lower_angle: 0.7612
+        upper_angle: 0.8422
+    filter6:
+      name: angle_filter_4
+      type: laser_filters/LaserScanAngularBoundsFilterInPlace
+      params:
+        lower_angle: 2.3299
+        upper_angle: 2.4544

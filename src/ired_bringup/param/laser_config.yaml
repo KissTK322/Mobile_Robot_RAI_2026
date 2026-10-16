@@ -7,17 +7,35 @@ scan_to_scan_filter_chain:
         use_message_range_limits: false
         lower_threshold: 0.25
         upper_threshold: .inf
-        lower_replacement_value: -.inf
+        lower_replacement_value: .nan
         upper_replacement_value: .inf
-#    filter2:
-#      name: angle_filter_1
-#      type: laser_filters/LaserScanAngularBoundsFilterInPlace
-#      params:
-#        lower_angle: 0.4
-#        upper_angle: 0.8
-#    filter3:
-#      name: angle_filter_2
-#      type: laser_filters/LaserScanAngularBoundsFilterInPlace
-#      params:
-#        lower_angle: -0.61
-#        upper_angle: -0.3
+    filter2:
+      name: post_rear_right
+      type: laser_filters/LaserScanAngularBoundsFilterInPlace
+      params:
+        lower_angle: -2.4000
+        upper_angle: -2.2600
+    filter3:
+      name: post_front_right
+      type: laser_filters/LaserScanAngularBoundsFilterInPlace
+      params:
+        lower_angle: -0.8500
+        upper_angle: -0.7000
+    filter4:
+      name: post_front_left
+      type: laser_filters/LaserScanAngularBoundsFilterInPlace
+      params:
+        lower_angle: 0.7100
+        upper_angle: 0.8500
+    filter5:
+      name: post_rear_left
+      type: laser_filters/LaserScanAngularBoundsFilterInPlace
+      params:
+        lower_angle: 2.2900
+        upper_angle: 2.4200
+    filter6:
+      name: extra_145deg
+      type: laser_filters/LaserScanAngularBoundsFilterInPlace
+      params:
+        lower_angle: 2.5000
+        upper_angle: 2.5550
