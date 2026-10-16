@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#111418">
+  <title>iRED Control</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">iRED <span class="host" id="host"></span></div>
+    <div class="chips">
+      <span class="chip" id="chip-app" title="Web manager">APP</span>
+      <span class="chip" id="chip-ros" title="ROS bridge">ROS</span>
+    </div>
+    <button class="estop" id="estop" aria-label="Emergency stop">STOP</button>
+  </header>
+
+  <div class="banner" id="estop-banner" hidden>E-STOP active: the robot is held at zero speed. Tap RELEASE to drive again.</div>
+
+  <main>
+    <!-- STATUS -->
+    <section class="page" id="page-status">
+      <div class="grid" id="sys-cards"></div>
+      <h2>Topics</h2>
+      <table class="table" id="topic-table"><tbody></tbody></table>
+      <h2>Running nodes <span class="muted" id="node-count"></span></h2>
+      <div class="nodes" id="node-list"></div>
+    </section>
+
+    <!-- LAUNCH -->
+    <section class="page" id="page-launch" hidden>
+      <div class="row-between">
+        <h2>Modes</h2>
+        <button class="btn" id="stop-all">Stop all</button>
+      </div>
+      <div class="cards" id="profile-cards"></div>
+    </section>
+
+    <!-- DRIVE -->
+    <section class="page" id="page-drive" hidden>
+      <div class="drive-warn" id="drive-warn"></div>
+      <div class="pads">
+        <div class="pad-wrap">
+          <div class="pad" id="pad-move"><div class="knob"></div></div>
+          <div class="pad-label">Move (forward / back / sideways)</div>
+        </div>
+        <div class="pad-wrap">
+          <div class="pad pad-x" id="pad-turn"><div class="knob"></div></div>
+          <div class="pad-label">Turn (left / right)</div>
+        </div>
+      </div>
+      <div class="sliders">
+        <label>Max speed <b id="lin-val"></b>
+          <input type="range" id="lin-max" min="0.05" max="0.40" step="0.05" value="0.20"></label>
+        <label>Max turn <b id="ang-val"></b>
+          <input type="range" id="ang-max" min="0.2" max="1.5" step="0.1" value="0.8"></label>
+      </div>
+      <div class="cmd-readout" id="cmd-readout">vx 0.00 · vy 0.00 · wz 0.00</div>
+      <p class="muted small">Hold a pad to drive; let go and the robot stops. Keyboard: W/S forward/back, A/D sideways, Q/E turn, Space = STOP.</p>
+    </section>
+
+    <!-- CAMERA -->
+    <section class="page" id="page-camera" hidden>
+      <div class="camera-box">
+        <img id="camera-img" alt="">
+        <div class="camera-empty" id="camera-empty">
+          <p>Camera is off.</p>
+          <button class="btn primary" id="camera-start">Start Camera</button>
+        </div>
+      </div>
+      <h2>ArUco markers</h2>
+      <table class="table" id="marker-table"><tbody></tbody></table>
+    </section>
+  </main>
+
+  <nav class="tabs">
+    <button data-tab="status" class="active">Status</button>
+    <button data-tab="launch">Launch</button>
+    <button data-tab="drive">Drive</button>
+    <button data-tab="camera">Camera</button>
+  </nav>
+
+  <dialog id="pin-dialog">
+    <form method="dialog" id="pin-form">
+      <h2>Enter PIN</h2>
+      <p class="muted small">The PIN is in ired_web/config/web.yaml on the robot.</p>
+      <input id="pin-input" inputmode="numeric" autocomplete="off" maxlength="12" placeholder="PIN">
+      <p class="error" id="pin-error"></p>
+      <button class="btn primary" type="submit">Unlock</button>
+    </form>
+  </dialog>
+
+  <script src="vendor/roslib.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

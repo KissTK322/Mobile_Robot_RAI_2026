@@ -1,0 +1,16 @@
+[Unit]
+Description=iRED robot web app (http://robotg5.local:8080)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=ired
+WorkingDirectory=/home/ired
+ExecStart=/bin/bash -c 'source /opt/ros/jazzy/setup.bash && source /home/ired/ros_environment.bash && exec ros2 run ired_web manager'
+KillSignal=SIGTERM
+TimeoutStopSec=40
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,41 @@
+# iRED web app settings. With colcon --symlink-install, edits here apply on the
+# next restart of the app (sudo systemctl restart ired-web), no rebuild needed.
+
+# PIN asked by the app before it can control the robot. Change it to your own.
+pin: "226698"
+
+http_port: 8080        # the app:      http://robotg5.local:8080
+rosbridge_port: 9090   # ROS <-> browser websocket
+video_port: 8081       # camera MJPEG stream (web_video_server)
+foxglove_port: 8765    # Foxglove Studio:  ws://robotg5.local:8765
+log_dir: ~/.ros/ired_web
+
+# Startable groups of nodes. {name} fields are filled from the settings above.
+# requires: started first if not running; conflicts: stopped first.
+profiles:
+  web:
+    title: Web services
+    description: rosbridge, camera stream and Foxglove bridge (always on)
+    command: ros2 launch ired_web web.launch.py rosbridge_port:={rosbridge_port} video_port:={video_port} foxglove_port:={foxglove_port}
+    autostart: true
+    hidden: true
+  robot:
+    title: Robot
+    description: Motors, IMU, LiDAR, odometry and EKF (ired_bringup)
+    command: ros2 launch ired_bringup bringup.launch.py
+  camera:
+    title: Camera + ArUco
+    description: Webcam with ArUco marker detection
+    command: python3 ~/ired_ws/src/ired_bringup/scripts/aruco_ros2_node.py
+  mapping:
+    title: Mapping (SLAM)
+    description: Cartographer, build a new map while driving
+    command: ros2 launch ired_navigation slam.launch.xml
+    requires: [robot]
+    conflicts: [navigation]
+  navigation:
+    title: Navigation
+    description: Nav2 with the saved map and AMCL
+    command: ros2 launch ired_navigation navigation.launch.xml
+    requires: [robot]
+    conflicts: [mapping]
