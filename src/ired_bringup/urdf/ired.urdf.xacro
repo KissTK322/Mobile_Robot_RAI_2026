@@ -1,7 +1,19 @@
 <?xml version="1.0"?>
 <robot name="IRED">
     <link name="base_footprint"/>
-    <link name="base_link"/>
+    <link name="base_link">
+        <!-- 3D model for display only (no collision). The STL is in mm with its
+             floor at z=-30.6 mm and the base centre at (-94.0, 4.8) mm, so this
+             origin puts that centre on base_link (0.11 m above the floor).
+             If the model faces the wrong way, use rpy="0 0 3.14159" and
+             xyz="-0.094 0.005 -0.0794". -->
+        <visual>
+            <origin xyz="0.094 -0.005 -0.0794" rpy="0.0 0.0 0.0"/>
+            <geometry>
+                <mesh filename="package://ired_bringup/meshes/ired_body.stl" scale="0.001 0.001 0.001"/>
+            </geometry>
+        </visual>
+    </link>
     <link name="wheel_front_left_link"/>
     <link name="wheel_front_right_link"/>
     <link name="wheel_rear_left_link"/>
