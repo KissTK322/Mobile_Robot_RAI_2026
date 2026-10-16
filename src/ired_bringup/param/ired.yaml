@@ -17,6 +17,11 @@ imu_node:
     imu_raw_topic: "/ired/imu/raw"
     imu_data_topic: "/ired/imu/data"
     rpy_topic: "/ired/imu/rollpitchyaw"
+    gyro_z_scale: 1.187
+    motor_data_topic: "/ired/motor/data"
+    still_rpm: 1.0
+    still_time: 0.5
+    bias_alpha: 0.05
 
 odom_node:
   ros__parameters:
