@@ -34,6 +34,10 @@ setup(
     entry_points={
         'console_scripts': [
             'manager = ired_web.manager:main',
+            'test_rotate = ired_web.tests.rotate_test:entry',
+            'test_straight = ired_web.tests.straight_test:entry',
+            'test_wheel = ired_web.tests.wheel_test:entry',
+            'test_pid_set = ired_web.tests.pid_set:entry',
         ],
     },
 )

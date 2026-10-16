@@ -14,11 +14,23 @@ On iPad / iPhone: Share → *Add to Home Screen* to open it like an app.
 | Status | CPU, temperature, fan, memory, Wi-Fi, power flags; live rate of the main topics; running nodes |
 | Launch | One button per mode: **Robot** (bringup), **Camera + ArUco**, **Mapping**, **Navigation**, with state and live log. *Stop all* stops everything cleanly |
 | Drive  | Two touch pads (move, turn) with speed limits. Robot moves only while a pad is held. Keyboard: W/S, A/D, Q/E |
+| Test   | Calibration tests with the LiDAR as the ruler: **turn in place** (IMU / wheel / EKF yaw error), **drive straight** (distance error, side and heading drift), **wheel step test** (PID tracking per wheel, wheels lifted), set or restore wheel PID gains. Results are kept and can be downloaded as CSV |
 | Camera | Live camera with ArUco overlay and the detected markers |
 | STOP   | Always in the top bar. Latches the robot at zero speed until *RELEASE*. Space bar on a PC |
 
 The hardware emergency button on the robot is still the real E-STOP; the app's
 STOP only commands zero velocity.
+
+## Tests
+
+Each test is a small script in `ired_web/tests/` started by the manager as
+`ros2 run ired_web test_*` only while it runs (one at a time), so it costs
+nothing when idle. They need Robot mode running, refuse to start while STOP is
+latched, and pressing STOP aborts them. Results go to
+`~/.ros/ired_web/results.jsonl` (CSV download on the Test page).
+
+They also run from a terminal, e.g. `ros2 run ired_web test_rotate 1 -0.5`
+(one clockwise turn) or `ros2 run ired_web test_straight 1.0 0.15`.
 
 ## How it runs
 

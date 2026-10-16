@@ -63,6 +63,63 @@
       <p class="muted small">Hold a pad to drive; let go and the robot stops. Keyboard: W/S forward/back, A/D sideways, Q/E turn, Space = STOP.</p>
     </section>
 
+    <!-- TEST -->
+    <section class="page" id="page-test" hidden>
+      <div class="job" id="test-job" hidden>
+        <div class="head"><span class="title" id="job-title"></span><span class="badge" id="job-state"></span></div>
+        <div class="muted small" id="job-progress"></div>
+        <div class="job-result" id="job-result"></div>
+        <button class="btn danger" id="job-abort">Abort test</button>
+      </div>
+
+      <div class="cards">
+        <div class="profile">
+          <div class="head"><span class="title">Turn in place</span></div>
+          <div class="muted small">Turns until the IMU says 360°, then the LiDAR measures the real angle. Needs ~40 cm free around the robot.</div>
+          <div class="form-row">
+            <select id="rot-dir"><option value="ccw">CCW (left)</option><option value="cw">CW (right)</option></select>
+            <select id="rot-turns"><option value="1">1 turn</option><option value="2">2 turns</option></select>
+            <select id="rot-speed"><option value="0.3">slow</option><option value="0.5" selected>normal</option></select>
+          </div>
+          <button class="btn primary" data-run="rotate">Run turn test</button>
+        </div>
+
+        <div class="profile">
+          <div class="head"><span class="title">Drive straight</span></div>
+          <div class="muted small">Drives by wheel count, LiDAR measures the real distance and drift. Stops by itself if something is within 35 cm.</div>
+          <div class="form-row">
+            <select id="st-dist"><option value="0.5">0.5 m</option><option value="1.0" selected>1.0 m</option></select>
+            <select id="st-dir"><option value="forward">forward</option><option value="backward">backward</option></select>
+            <select id="st-speed"><option value="0.10">slow</option><option value="0.15" selected>normal</option><option value="0.20">fast</option></select>
+          </div>
+          <button class="btn primary" data-run="straight">Run straight test</button>
+        </div>
+
+        <div class="profile">
+          <div class="head"><span class="title">Wheel PID</span></div>
+          <div class="muted small">Lift the robot so all 4 wheels are off the floor before the step test.</div>
+          <table class="mini" id="pid-table"></table>
+          <button class="btn primary" data-run="wheel">Run wheel step test (wheels lifted)</button>
+          <div class="form-row">
+            <select id="pid-wheel"><option>ALL</option><option>FL</option><option>FR</option><option>RL</option><option>RR</option></select>
+            <input id="pid-kp" type="number" step="0.1" placeholder="kp">
+            <input id="pid-ki" type="number" step="0.5" placeholder="ki">
+            <input id="pid-kd" type="number" step="0.01" placeholder="kd">
+          </div>
+          <div class="actions">
+            <button class="btn" id="pid-apply">Set gains</button>
+            <button class="btn" id="pid-restore">Restore ired.yaml</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="row-between">
+        <h2>Results</h2>
+        <a class="btn" id="results-csv" download>Download CSV</a>
+      </div>
+      <table class="table" id="results-table"><tbody></tbody></table>
+    </section>
+
     <!-- CAMERA -->
     <section class="page" id="page-camera" hidden>
       <div class="camera-box">
@@ -81,6 +138,7 @@
     <button data-tab="status" class="active">Status</button>
     <button data-tab="launch">Launch</button>
     <button data-tab="drive">Drive</button>
+    <button data-tab="test">Test</button>
     <button data-tab="camera">Camera</button>
   </nav>
 
