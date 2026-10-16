@@ -5,10 +5,9 @@
         <!-- 3D model for display only (no collision). The STL is in mm with its
              floor at z=-30.6 mm and the base centre at (-94.0, 4.8) mm, so this
              origin puts that centre on base_link (0.11 m above the floor).
-             If the model faces the wrong way, use rpy="0 0 3.14159" and
-             xyz="-0.094 0.005 -0.0794". -->
+             The robot front (camera and arm) is -X in the STL, hence the 180 deg yaw. -->
         <visual>
-            <origin xyz="0.094 -0.005 -0.0794" rpy="0.0 0.0 0.0"/>
+            <origin xyz="-0.094 0.005 -0.0794" rpy="0.0 0.0 3.14159"/>
             <geometry>
                 <mesh filename="package://ired_bringup/meshes/ired_body.stl" scale="0.001 0.001 0.001"/>
             </geometry>
