@@ -35,10 +35,13 @@
         <origin xyz="0.0 0.0 0.285" rpy="0.0 0.0 0.0"/>
     </joint>
 
+    <!-- Camera lens is 0.23 m in front of the centre (from the 3D model) and 0.29 m above
+         the floor (measured); base_link is 0.11 m above the floor.
+         Keep colons out of comments here, bringup.launch.py parses this file as YAML. -->
     <joint name="aruco_camera_joint" type="fixed">
         <parent link="base_link"/>
         <child link="aruco_camera_link"/>
-        <origin xyz="0.0 0.0 0.335" rpy="0.0 0.0 0.0"/>
+        <origin xyz="0.23 0.0 0.18" rpy="0.0 0.0 0.0"/>
     </joint>
 
     <joint name="base_cartesian_joint" type="fixed">
