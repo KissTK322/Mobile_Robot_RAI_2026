@@ -2,7 +2,7 @@
 # next restart of the app (sudo systemctl restart ired-web), no rebuild needed.
 
 # PIN asked by the app before it can control the robot. Change it to your own.
-pin: "226698"
+pin: "123456"
 
 http_port: 8080        # the app:      http://robotg5.local:8080
 rosbridge_port: 9090   # ROS <-> browser websocket
