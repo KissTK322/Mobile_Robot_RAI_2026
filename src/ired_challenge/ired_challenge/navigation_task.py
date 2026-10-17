@@ -1,0 +1,167 @@
+"""Navigation challenge state machine (no ROS, so it can be tested on a PC).
+
+Flow: wait for the game -> drive through the red zone -> visit every zone the
+refbox sends, staying DWELL seconds in each until the refbox drops it from the
+`remaining` list -> done. Failed drives are retried, then the zone is moved to
+the end of the list and tried again later. If the game stops, the robot stops
+and continues from where it was when the game runs again.
+
+The ROS node feeds update() with the game state, the zones still to visit and
+the robot pose, and gives it a `nav` object with:
+    go_to(x, y, yaw)   start driving to a pose in the map frame
+    state()            'active' | 'succeeded' | 'failed'
+    cancel()
+    clear_costmaps()"""
+from ired_challenge.field import visit_order
+
+WAIT_GAME, RED_ZONE, PICK, DRIVE, DWELL, DONE = 'WAIT_GAME', 'RED_ZONE', 'PICK', 'DRIVE', 'DWELL', 'DONE'
+
+
+class NavigationTask:
+    def __init__(self, nav, field, log=print, red_zone='C_Z32', dwell=5.5, confirm_timeout=4.0,
+                 drive_timeout=40.0, retries=2, order='given', blocked_zones=()):
+        self.nav, self.field, self.log = nav, field, log
+        self.red_zone = red_zone
+        self.dwell = dwell                      # refbox needs 5 s inside the zone
+        self.confirm_timeout = confirm_timeout  # extra wait for the refbox to drop the zone
+        self.drive_timeout = drive_timeout
+        self.retries = retries
+        self.order = order
+        self.blocked = list(blocked_zones)      # zones with an MPS station
+        self.state = WAIT_GAME
+        self.red_done = False
+        self.plan = []                          # zones still to visit, in order
+        self.target = None
+        self.tries = 0
+        self.t_state = 0.0
+        self.t_inside = None
+        self.visited = []
+        self.deferred = []
+
+    # ---------------------------------------------------------------- helpers
+    def _set(self, state, now):
+        if state != self.state:
+            self.log(f'{self.state} -> {state}' + (f' ({self.target})' if self.target else ''))
+        self.state, self.t_state = state, now
+
+    def _drive_to(self, zone, pose, now):
+        x, y = self.field.goal_in_zone(zone, (pose[0], pose[1]), self.blocked)
+        self.target = zone
+        self.nav.go_to(x, y, pose[2])           # omni base: keep the heading, no turning
+        self._set(RED_ZONE if zone == self.red_zone and not self.red_done else DRIVE, now)
+
+    def info(self):
+        return {'state': self.state, 'target': self.target, 'plan': self.plan,
+                'visited': self.visited, 'red_zone_done': self.red_done}
+
+    # ---------------------------------------------------------------- main step
+    def update(self, now, game_on, remaining, pose):
+        """Call ~10 times a second. remaining: zone names the refbox still wants
+        (None if no routes received yet). pose: (x, y, yaw) in the map frame."""
+        if not game_on:
+            if self.state in (RED_ZONE, DRIVE, DWELL):
+                self.nav.cancel()
+                self.log('Game stopped, robot stopped')
+                self.target = None
+                self._set(WAIT_GAME, now)
+            return self.info()
+
+        if self.state == DONE:
+            return self.info()
+
+        if self.state == WAIT_GAME:
+            if not self.red_done:
+                self.tries = 0
+                self._drive_to(self.red_zone, pose, now)
+            else:
+                self._set(PICK, now)
+            return self.info()
+
+        if self.state == RED_ZONE:
+            # Passing through is enough: done as soon as the robot is inside it
+            if self.field.inside(self.red_zone, pose[0], pose[1], margin=0.1) or self.nav.state() == 'succeeded':
+                self.nav.cancel()
+                self.red_done = True
+                self.log('Red zone passed')
+                self.target = None
+                self._set(PICK, now)
+            elif self.nav.state() == 'failed' or now - self.t_state > self.drive_timeout:
+                self._retry(pose, now)
+            return self.info()
+
+        if remaining is None:
+            return self.info()                  # no routes from the refbox yet
+        remaining = list(remaining)
+        # keep our order, but follow the refbox: drop visited zones, add new ones
+        self.plan = [z for z in self.plan if z in remaining] + [z for z in remaining if z not in self.plan]
+
+        if self.state == PICK:
+            if not self.plan:
+                self.target = None
+                self._set(DONE, now)
+                self.log(f'All zones visited: {self.visited}')
+                return self.info()
+            self.plan = visit_order_keep_deferred(self.plan, self.deferred, (pose[0], pose[1]), self.field, self.order)
+            self.tries = 0
+            self._drive_to(self.plan[0], pose, now)
+            return self.info()
+
+        if self.state == DRIVE:
+            if self.target not in remaining:            # refbox already counted it
+                self.nav.cancel()
+                self._visited(now)
+            elif self.nav.state() == 'succeeded' and self.field.inside(self.target, pose[0], pose[1], margin=0.05):
+                self.t_inside = now
+                self._set(DWELL, now)
+            elif self.nav.state() in ('failed', 'succeeded') or now - self.t_state > self.drive_timeout:
+                self._retry(pose, now)
+            return self.info()
+
+        if self.state == DWELL:
+            if self.target not in remaining:
+                self._visited(now)
+            elif not self.field.inside(self.target, pose[0], pose[1], margin=0.02):
+                self.log(f'Drifted out of {self.target}, driving back')
+                self._drive_to(self.target, pose, now)
+            elif now - self.t_inside > self.dwell + self.confirm_timeout:
+                self.log(f'{self.target}: refbox did not confirm, driving to the zone centre again')
+                self._retry(pose, now)
+            return self.info()
+
+        return self.info()
+
+    def _visited(self, now):
+        self.log(f'Visited {self.target}')
+        self.visited.append(self.target)
+        if self.target in self.plan:
+            self.plan.remove(self.target)
+        self.target = None
+        self._set(PICK, now)
+
+    def _retry(self, pose, now):
+        self.nav.cancel()
+        self.tries += 1
+        zone = self.target
+        if self.tries <= self.retries:
+            self.log(f'{zone}: try {self.tries + 1} of {self.retries + 1}')
+            self.nav.clear_costmaps()
+            self._drive_to(zone, pose, now)
+            return
+        if zone == self.red_zone and not self.red_done:
+            self.log('Red zone failed, trying again')     # cannot skip it, the rules require it
+            self.tries = 0
+            self.nav.clear_costmaps()
+            self._drive_to(zone, pose, now)
+            return
+        self.log(f'{zone}: giving up for now, will come back to it last')
+        self.deferred.append(zone)
+        self.target = None
+        self._set(PICK, now)
+
+
+def visit_order_keep_deferred(plan, deferred, start_xy, field, mode):
+    """Order the plan, then push zones that failed before to the end."""
+    fresh = [z for z in plan if z not in deferred]
+    late = [z for z in plan if z in deferred]
+    return visit_order(fresh, start_xy, field, mode) + late
+

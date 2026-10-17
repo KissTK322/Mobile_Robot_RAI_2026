@@ -1,0 +1,17 @@
+navigation_challenge:
+  ros__parameters:
+    # Field: zone C_Zxy centre = ((x - 0.5) * zone_size + origin_x, (y - 0.5) * zone_size + origin_y)
+    # in the map frame. Check on the field that the map origin is the outer corner of C_Z11.
+    zone_size: 1.0
+    origin_x: 0.0
+    origin_y: 0.0
+    red_zone: "C_Z32"        # must be passed before the challenge counts
+    dwell: 5.5               # s in each zone (refbox needs 5 s)
+    confirm_timeout: 4.0     # extra s to wait for the refbox to count the zone
+    drive_timeout: 40.0      # s per drive before retrying
+    retries: 2               # retries per zone, then it is tried again at the end
+    order: "given"           # "given" = refbox order, "nearest" = shortest driving (only if the rules allow)
+    avoid_mps_zones: true    # stop beside an MPS station when it stands in the target zone
+    rate: 10.0
+    map_frame: "map"
+    base_frame: "base_footprint"
