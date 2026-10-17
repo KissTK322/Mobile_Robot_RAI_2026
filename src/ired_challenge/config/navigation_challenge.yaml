@@ -23,4 +23,5 @@ mps_obstacles:
     origin_y: 0.0
     margin: 0.03     # m added around the 20 cm box (Nav2 inflation adds the robot radius)
     rate: 2.0
-    frame: "map"
+    map_frame: "map"
+    robot_frame: "base_footprint"   # points are sent in the robot frame, see mps_obstacles_node.py
