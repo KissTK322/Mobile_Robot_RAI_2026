@@ -3,7 +3,7 @@ import math
 
 import pytest
 
-from ired_challenge.field import Field, visit_order
+from ired_challenge.field import Field, mps_footprint, visit_order
 from ired_challenge.navigation_task import DONE, NavigationTask
 
 F = Field()
@@ -25,6 +25,14 @@ def test_zone_at_and_inside():
     assert not F.inside('C_Z32', 2.9, 1.1, margin=0.2)
 
 
+def test_magenta_zones_are_mirrored_to_negative_x():
+    both = Field(magenta=True)
+    assert both.center('M_Z32') == (-2.5, 1.5)
+    assert both.zone_at(-2.5, 1.5) == 'M_Z32'
+    with pytest.raises(ValueError):
+        F.center('M_Z32')                                 # course field is cyan only
+
+
 def test_bad_zone_names():
     for bad in ('C_Z60', 'C_Z06', 'Z32', 'C_Z3'):
         with pytest.raises(ValueError):
@@ -32,10 +40,19 @@ def test_bad_zone_names():
 
 
 def test_goal_beside_mps_stays_in_zone_and_faces_robot():
-    gx, gy = F.goal_in_zone('C_Z33', from_xy=(0.5, 2.5), blocked_zones=['M_Z33'])
+    gx, gy = F.goal_in_zone('C_Z33', from_xy=(0.5, 2.5), blocked_zones=['C_Z33'])
     assert F.inside('C_Z33', gx, gy, margin=0.05)
     assert math.hypot(gx - 2.5, gy - 2.5) >= 0.37      # robot radius + box clears
     assert gx < 2.5                                       # the side the robot comes from
+
+
+def test_mps_footprint_covers_the_box_only():
+    pts = mps_footprint(F.center('C_Z23'), 45)
+    cx, cy = F.center('C_Z23')
+    far = max(math.hypot(x - cx, y - cy) for x, y in pts)
+    assert 0.17 < far <= 0.13 * math.sqrt(2) + 1e-9          # corners of the 26 cm square
+    assert all(F.zone_at(x, y) == 'C_Z23' for x, y in pts)
+    assert len(pts) >= 64
 
 
 def test_nearest_order_is_shorter_than_given():
@@ -175,7 +192,7 @@ def test_does_nothing_before_the_game_starts():
 
 
 def test_mps_zone_is_visited_beside_the_box():
-    task, ref, nav, logs, _ = simulate(['C_Z33', 'C_Z11'], blocked=['M_Z33'])
+    task, ref, nav, logs, _ = simulate(['C_Z33', 'C_Z11'], blocked=['C_Z33'])
     assert ref.remaining == []
 
 

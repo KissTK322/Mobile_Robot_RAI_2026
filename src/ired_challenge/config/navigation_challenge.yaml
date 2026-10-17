@@ -10,8 +10,17 @@ navigation_challenge:
     confirm_timeout: 4.0     # extra s to wait for the refbox to count the zone
     drive_timeout: 40.0      # s per drive before retrying
     retries: 2               # retries per zone, then it is tried again at the end
-    order: "given"           # "given" = refbox order, "nearest" = shortest driving (only if the rules allow)
+    order: "nearest"         # refbox accepts any order (challenges.clp); "given" = refbox order
     avoid_mps_zones: true    # stop beside an MPS station when it stands in the target zone
     rate: 10.0
     map_frame: "map"
     base_frame: "base_footprint"
+
+mps_obstacles:
+  ros__parameters:
+    zone_size: 1.0
+    origin_x: 0.0
+    origin_y: 0.0
+    margin: 0.03     # m added around the 20 cm box (Nav2 inflation adds the robot radius)
+    rate: 2.0
+    frame: "map"

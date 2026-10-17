@@ -14,6 +14,8 @@
   <exec_depend>tf_transformations</exec_depend>
   <exec_depend>nav2_simple_commander</exec_depend>
   <exec_depend>refbox_msgs</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>sensor_msgs_py</exec_depend>
   <test_depend>python3-pytest</test_depend>
 
   <export>

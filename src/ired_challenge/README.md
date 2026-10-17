@@ -30,11 +30,20 @@ State is published as JSON on `/challenge/navigation/state`.
 Settings: `config/navigation_challenge.yaml` (zone size, map origin, red zone,
 dwell time, retries, visit order).
 
+## Refbox facts this relies on (rcll-refbox source)
+
+- Zones may be visited in **any order**: a zone counts when the robot's pose
+  is inside it for more than 5 s and it is still in `remaining`. The default is
+  therefore `order: nearest` (about half the driving of the refbox order).
+  Passing C_Z32 first is a course rule, not a refbox rule.
+- The pose must keep reaching the refbox; after 5 s without one the robot
+  counts as lost (mqtt_refbox sends it every second).
+- Route zones never include C_Z31, C_Z41, C_Z51 or a zone with an MPS, so the
+  "stop beside the MPS" case should not happen; it stays as a safety net.
+
 ## Things to check on the field
 
 - The map origin must be the outer corner of C_Z11 (or set `origin_x/y`).
-- Whether the zones must be visited in the refbox order (`order: given`) or
-  any order (`order: nearest`, about half the driving).
 - That the refbox `remaining` list starts with all zones and shrinks as
   zones are counted (assumed from `ired_refbox`).
 

@@ -60,7 +60,7 @@ class NavigationChallengeNode(Node):
         p = self.declare_parameters('', [
             ('zone_size', 1.0), ('origin_x', 0.0), ('origin_y', 0.0), ('red_zone', 'C_Z32'),
             ('dwell', 5.5), ('confirm_timeout', 4.0), ('drive_timeout', 40.0), ('retries', 2),
-            ('order', 'given'), ('avoid_mps_zones', True), ('rate', 10.0),
+            ('order', 'nearest'), ('avoid_mps_zones', True), ('rate', 10.0),
             ('map_frame', 'map'), ('base_frame', 'base_footprint'),
         ])
         g = {x.name: x.value for x in p}

@@ -3,7 +3,9 @@
 The field is 5 x 5 zones of 1 m. Zone "C_Zxy" is column x (1..5) and row y
 (1..5); in the map frame its centre is ((x - 0.5) * size + origin_x,
 (y - 0.5) * size + origin_y). With origin (0, 0) the map origin is the outer
-corner of C_Z11, the same convention as the refbox example code."""
+corner of C_Z11. This is the rcll-refbox convention (utils.clp pose-to-zone):
+"C_" zones are the cyan half (x >= 0), "M_" zones the magenta half, mirrored
+to negative x. The prefix is the field half, not "machine"."""
 import math
 import re
 
@@ -11,7 +13,8 @@ ZONE_RE = re.compile(r'^([CM])_Z([1-9])([1-9])$')
 
 
 class Field:
-    def __init__(self, zone_size=1.0, origin=(0.0, 0.0), columns=5, rows=5):
+    def __init__(self, zone_size=1.0, origin=(0.0, 0.0), columns=5, rows=5, magenta=False):
+        self.magenta = magenta          # the course field is the cyan half only
         self.size = zone_size
         self.ox, self.oy = origin
         self.columns, self.rows = columns, rows
@@ -21,19 +24,25 @@ class Field:
         if not m:
             raise ValueError(f'not a zone name: {zone!r}')
         x, y = int(m.group(2)), int(m.group(3))
+        if m.group(1) == 'M' and not self.magenta:
+            raise ValueError(f'magenta zone on a cyan-only field: {zone!r}')
         if not (1 <= x <= self.columns and 1 <= y <= self.rows):
             raise ValueError(f'zone outside the field: {zone!r}')
         return m.group(1), x, y
 
     def center(self, zone):
-        _, x, y = self.parse(zone)
-        return ((x - 0.5) * self.size + self.ox, (y - 0.5) * self.size + self.oy)
+        half, x, y = self.parse(zone)
+        sx = -1.0 if half == 'M' else 1.0
+        return (sx * (x - 0.5) * self.size + self.ox, (y - 0.5) * self.size + self.oy)
 
-    def zone_at(self, px, py, prefix='C'):
-        x = math.floor((px - self.ox) / self.size) + 1
+    def zone_at(self, px, py):
+        dx = px - self.ox
+        if dx < 0 and not self.magenta:
+            return None
+        x = math.floor(abs(dx) / self.size) + 1
         y = math.floor((py - self.oy) / self.size) + 1
         if 1 <= x <= self.columns and 1 <= y <= self.rows:
-            return f'{prefix}_Z{x}{y}'
+            return f"{'M' if dx < 0 else 'C'}_Z{x}{y}"
         return None
 
     def inside(self, zone, px, py, margin=0.0):
@@ -50,13 +59,26 @@ class Field:
         `from_xy`, far enough from the box for the robot to fit but still inside
         the zone."""
         cx, cy = self.center(zone)
-        _, zx, zy = self.parse(zone)
-        if not any(self.parse(b)[1:] == (zx, zy) for b in blocked_zones):
+        if zone not in blocked_zones:
             return cx, cy
         offset = min(robot_radius + mps_half_diag + 0.03, self.size / 2 - 0.08)
         fx, fy = from_xy
         candidates = [(cx + offset, cy), (cx - offset, cy), (cx, cy + offset), (cx, cy - offset)]
         return min(candidates, key=lambda p: math.hypot(p[0] - fx, p[1] - fy))
+
+
+def mps_footprint(center, rotation_deg, size=0.20, margin=0.03, step=0.03):
+    """Points filling an MPS box footprint (square of `size` + `margin` each side),
+    rotated by `rotation_deg` (refbox: counter-clockwise from +x) about `center`."""
+    half = size / 2 + margin
+    n = max(2, int(round(2 * half / step)) + 1)
+    c, s = math.cos(math.radians(rotation_deg)), math.sin(math.radians(rotation_deg))
+    pts = []
+    for i in range(n):
+        for j in range(n):
+            u, v = -half + 2 * half * i / (n - 1), -half + 2 * half * j / (n - 1)
+            pts.append((center[0] + c * u - s * v, center[1] + s * u + c * v))
+    return pts
 
 
 def visit_order(zones, start_xy, field, mode='given'):

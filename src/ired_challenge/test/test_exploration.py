@@ -37,25 +37,35 @@ def test_output_marker_flips_direction():
     assert math.isclose(abs(machine_from_marker(m, 'output')[2]), math.pi)
 
 
-def test_refbox_rotation_snaps_to_45():
-    assert refbox_rotation(0.0) == 270
-    assert refbox_rotation(math.radians(90)) == 180
-    assert refbox_rotation(math.radians(-90)) == 0
-    assert refbox_rotation(math.radians(47)) == 225      # 223 -> 225
+def test_refbox_rotation_is_ccw_from_x_snapped_to_45():
+    assert refbox_rotation(0.0) == 0
+    assert refbox_rotation(math.radians(90)) == 90       # a quarter turn counter-clockwise
+    assert refbox_rotation(math.radians(-90)) == 270
+    assert refbox_rotation(math.radians(47)) == 45
+    assert refbox_rotation(math.radians(-170)) == 180
+
+
+def test_marker_table_matches_rulebook():
+    from ired_challenge.exploration import DEFAULT_MARKERS
+    assert DEFAULT_MARKERS[102] == ('C-CS1', 'input') and DEFAULT_MARKERS[101] == ('C-CS1', 'output')
+    assert DEFAULT_MARKERS[122] == ('C-BS', 'input') and DEFAULT_MARKERS[141] == ('C-SS', 'output')
+    assert DEFAULT_MARKERS[212] == ('M-RS1', 'input')
+    assert len(DEFAULT_MARKERS) == 28
 
 
 def test_estimator_finds_zone_and_rotation_from_noisy_views():
     rng = random.Random(1)
     est = MachineEstimator(F)
-    box, input_dir = (3.5, 2.5), math.radians(90)           # C-CS1 in M_Z43, input facing +y
+    box, input_dir = (3.5, 2.5), math.radians(90)           # C-CS1 in C_Z43, input facing +y
     views = [((3.0, 1.0, math.radians(70)), 'output'), ((2.0, 3.5, math.radians(-30)), 'input'),
              ((4.4, 3.8, math.radians(-110)), 'input'), ((3.4, 1.2, math.radians(95)), 'output')]
     for robot, side in views:
-        pos, yaw = sighting(robot, box, input_dir, side, noise=0.03, rng=rng)
-        assert est.add(robot, 102 if side == 'input' else 101, pos, yaw + rng.gauss(0, 4)) == 'C-CS1'
+        for _ in range(4):                                  # a few frames per view
+            pos, yaw = sighting(robot, box, input_dir, side, noise=0.03, rng=rng)
+            assert est.add(robot, 102 if side == 'input' else 101, pos, yaw + rng.gauss(0, 4)) == 'C-CS1'
     e = est.estimate('C-CS1')
-    assert e['zone'] == 'M_Z43'
-    assert e['rotation'] == refbox_rotation(input_dir)
+    assert e['zone'] == 'C_Z43'
+    assert e['rotation'] == 90 == refbox_rotation(input_dir)
     assert math.hypot(e['x'] - box[0], e['y'] - box[1]) < 0.08
     assert e['ready']
 
@@ -64,6 +74,24 @@ def test_not_ready_until_enough_agreeing_sightings():
     est = MachineEstimator(F)
     pos, yaw = sighting((1.0, 1.0, 0.0), (2.5, 1.5), 0.0, 'input')
     est.add((1.0, 1.0, 0.0), 122, pos, yaw)
+    assert not est.estimate('C-BS')['ready']
+
+
+def test_not_ready_from_a_single_view_point():
+    est = MachineEstimator(F)
+    for _ in range(20):                                     # many frames, same spot
+        pos, yaw = sighting((1.0, 1.0, 0.0), (2.5, 1.5), 0.0, 'input')
+        est.add((1.0, 1.0, 0.0), 122, pos, yaw)
+    e = est.estimate('C-BS')
+    assert e['agreeing'] == 20 and e['views'] == 1 and not e['ready']
+
+
+def test_not_ready_when_box_is_on_a_zone_border():
+    est = MachineEstimator(F)
+    for robot in ((1.0, 1.0, 0.0), (1.0, 2.0, 0.0)):
+        for _ in range(6):
+            pos, yaw = sighting(robot, (2.02, 1.5), 0.0, 'input')   # 2 cm from the C_Z21/C_Z31 border
+            est.add(robot, 122, pos, yaw)
     assert not est.estimate('C-BS')['ready']
 
 
