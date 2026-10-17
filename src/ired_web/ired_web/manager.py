@@ -243,30 +243,31 @@ class WebNode(Node):
         self.stamps_lock = threading.Lock()
         self.pid_gains = None
         self.pid_gains_at = 0.0
-        self.subs = []
+        self.subs = {}           # topic -> subscription
         self.watch_lock = threading.Lock()
         self.cmd_pub = self.create_publisher(TwistStamped, '/cmd_vel', 10)
         self._estop = False
         self.estop_timer_handle = self.create_timer(0.05, self.estop_timer)
         self.estop_timer_handle.cancel()     # only runs while STOP is latched
 
-    def watch(self, on):
-        """Subscribe to the watched topics only while someone has the app open.
+    def watch(self, topics):
+        """Subscribe to exactly `topics` (a subset of WATCHED_TOPICS).
 
-        raw=True: messages are only counted, never unpacked; wheel data is unpacked
-        once a second for the PID gains shown on the Test page."""
+        Every message costs Python time on the Pi (~1 % of a core per 10 msg/s), so
+        topics are only watched while a page that shows them is open. raw=True: the
+        messages are counted, never unpacked; wheel data is unpacked once a second
+        for the PID gains on the Test page."""
         with self.watch_lock:
-            if on and not self.subs:
-                self.subs = [self.create_subscription(t, n, lambda m, n=n: self.tick(n, m), q, raw=True)
-                             for n, t, q in WATCHED_TOPICS]
-            elif not on and self.subs:
-                for sub in self.subs:
-                    self.destroy_subscription(sub)
-                self.subs = []
-                with self.stamps_lock:
-                    for s in self.stamps.values():
-                        s.clear()
-                self.pid_gains = None
+            for name, msg_type, qos in WATCHED_TOPICS:
+                if name in topics and name not in self.subs:
+                    self.subs[name] = self.create_subscription(
+                        msg_type, name, lambda m, n=name: self.tick(n, m), qos, raw=True)
+                elif name not in topics and name in self.subs:
+                    self.destroy_subscription(self.subs.pop(name))
+                    with self.stamps_lock:
+                        self.stamps[name].clear()
+                    if name == '/ired/motor/data':
+                        self.pid_gains = None
 
     def tick(self, topic, raw):
         if topic == '/ired/motor/data' and time.time() - self.pid_gains_at > 1.0:
@@ -378,7 +379,7 @@ class Manager:
         self.profiles = {n: Profile(n, spec, cfg) for n, spec in cfg['profiles'].items()}
         self.failures = {}       # ip -> (count, locked_until)
         self.job = None
-        self.last_viewed = 0.0
+        self.last_viewed = {'status': 0.0, 'gains': 0.0}
         self.results_path = os.path.join(cfg['log_dir'], 'results.jsonl')
 
     def check_pin(self, ip, pin):
@@ -461,21 +462,29 @@ class Manager:
         except (OSError, KeyError, TypeError, yaml.YAMLError):
             return {}
 
-    def viewed(self):
-        self.last_viewed = time.time()
-        self.node.watch(True)
+    def viewed(self, what):
+        """'status' = Status page open (count every topic), 'gains' = Test page open (wheel data only)."""
+        self.last_viewed[what] = time.time()
+        self.idle_check()
 
     def idle_check(self):
-        if time.time() - self.last_viewed > 5.0:
-            self.node.watch(False)
+        now = time.time()
+        if now - self.last_viewed['status'] < 5.0:
+            topics = {name for name, _, _ in WATCHED_TOPICS}
+        elif now - self.last_viewed['gains'] < 5.0:
+            topics = {'/ired/motor/data'}
+        else:
+            topics = set()
+        self.node.watch(topics)
 
     def tests_info(self):
-        self.viewed()
+        self.viewed('gains')
         return {'job': self.job.info() if self.job else None, 'results': self.results(15),
                 'gains': self.node.pid_gains, 'yaml': self.yaml_settings()}
 
-    def status(self):
-        self.viewed()
+    def status(self, topics=False):
+        if topics:
+            self.viewed('status')
         return {
             'time': time.time(),
             'system': self.system.snapshot(),
@@ -530,7 +539,7 @@ def make_handler(manager):
                 c = manager.cfg
                 return self.send_json(200, {k: c[k] for k in ('rosbridge_port', 'video_port', 'foxglove_port')})
             if method == 'GET' and parts == ['status']:
-                return self.send_json(200, manager.status())
+                return self.send_json(200, manager.status(topics=parse_qs(url.query).get('topics') == ['1']))
             if method == 'GET' and len(parts) == 3 and parts[0] == 'profiles' and parts[2] == 'log':
                 p = manager.profiles.get(parts[1])
                 if not p:

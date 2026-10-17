@@ -88,7 +88,7 @@ function publishCmd(vx, vy, wz) {
 let appOk = false;
 async function poll() {
   try {
-    S.status = await api('status');
+    S.status = await api(S.tab === 'status' ? 'status?topics=1' : 'status');   // topic rates cost Pi CPU, only when shown
     appOk = true;
     S.estop = S.status.estop;
     render();
