@@ -25,7 +25,7 @@ amcl:
     recovery_alpha_fast: 0.1
     recovery_alpha_slow: 0.001 
     resample_interval: 1
-    robot_model_type: "nav2_amcl::DifferentialMotionModel"
+    robot_model_type: "nav2_amcl::OmniMotionModel"
     save_pose_rate: 2.0   
     sigma_hit: 0.12  
     tf_broadcast: true
@@ -115,33 +115,33 @@ controller_server:
     goal_checker:
       stateful: true
       plugin: "nav2_controller::SimpleGoalChecker"
-      xy_goal_tolerance: 0.25
-      yaw_goal_tolerance: 0.25
+      xy_goal_tolerance: 0.15
+      yaw_goal_tolerance: 0.5
     FollowPath:
       plugin: "dwb_core::DWBLocalPlanner"
       debug_trajectory_details: true
-      min_vel_x: 0.0
-      min_vel_y: 0.0
+      min_vel_x: -0.25
+      min_vel_y: -0.25
       max_vel_x: 0.3
-      max_vel_y: 0.0
+      max_vel_y: 0.25
       max_vel_theta: 1.0
-      min_speed_xy: 0.10
+      min_speed_xy: 0.05
       max_speed_xy: 0.3
       min_speed_theta: 0.4
-      acc_lim_x: 3.0
-      acc_lim_y: 0.0
-      acc_lim_theta: 3.2
-      decel_lim_x: -2.5
-      decel_lim_y: 0.0
-      decel_lim_theta: -3.2
-      vx_samples: 20
-      vy_samples: 0
-      vtheta_samples: 40
+      acc_lim_x: 1.0
+      acc_lim_y: 1.0
+      acc_lim_theta: 2.0
+      decel_lim_x: -1.0
+      decel_lim_y: -1.0
+      decel_lim_theta: -2.0
+      vx_samples: 8
+      vy_samples: 8
+      vtheta_samples: 12
       sim_time: 1.5
       linear_granularity: 0.05
       angular_granularity: 0.025
       transform_tolerance: 0.2
-      xy_goal_tolerance: 0.25
+      xy_goal_tolerance: 0.15
       trans_stopped_velocity: 0.25
       short_circuit_trajectory_evaluation: true
       stateful: true
@@ -169,11 +169,11 @@ local_costmap:
       width: 3
       height: 3
       resolution: 0.05
-      robot_radius: 0.17
+      robot_radius: 0.22
       plugins: ["obstacle_layer", "inflation_layer"]
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        inflation_radius: 0.20  
+        inflation_radius: 0.30  
         cost_scaling_factor: 12.0  
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
@@ -197,7 +197,7 @@ global_costmap:
       global_frame: map
       robot_base_frame: base_link
       transform_tolerance: 0.5
-      robot_radius: 0.17
+      robot_radius: 0.22
       resolution: 0.05
       track_unknown_space: true
       plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
@@ -221,7 +221,7 @@ global_costmap:
         transform_tolerance: 0.1
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        inflation_radius: 0.20  
+        inflation_radius: 0.30  
         cost_scaling_factor: 12.0  
       always_send_full_costmap: true
 
@@ -271,7 +271,7 @@ behavior_server:
     simulate_ahead_time: 2.0
     max_rotational_vel: 1.0
     min_rotational_vel: 0.4
-    rotational_acc_lim: 3.2
+    rotational_acc_lim: 2.0
     enable_stamped_cmd_vel: true
 
 waypoint_follower:
@@ -307,7 +307,7 @@ collision_monitor:
     polygons: ["PolygonStop", "PolygonSlow", "FootprintApproach"]
     PolygonStop:
       type: "circle"
-      radius: 0.17
+      radius: 0.24
       action_type: "stop"
       min_points: 4
       visualize: true
@@ -315,7 +315,7 @@ collision_monitor:
       enabled: true
     PolygonSlow:
       type: "circle"
-      radius: 0.17
+      radius: 0.35
       action_type: "slowdown"
       min_points: 4
       slowdown_ratio: 0.3
@@ -324,7 +324,7 @@ collision_monitor:
       enabled: true
     PolygonLimit:
       type: "circle"
-      radius: 0.17
+      radius: 0.40
       action_type: "limit"
       min_points: 4
       linear_limit: 0.4
@@ -349,7 +349,7 @@ collision_monitor:
       enabled: False
       polygon_pub_topic: "velocity_polygon_stop"
       velocity_polygons: ["rotation", "translation_forward", "translation_backward", "stopped"]
-      holonomic: false
+      holonomic: true
       rotation:
         points: "[[0.3, 0.3], [0.3, -0.3], [-0.3, -0.3], [-0.3, 0.3]]"
         linear_min: 0.0
@@ -380,12 +380,12 @@ velocity_smoother:
     smoothing_frequency: 20.0
     scale_velocities: false
     feedback: "OPEN_LOOP"
-    max_velocity: [0.3, 0.0, 1.5]
-    min_velocity: [-0.3, 0.0, -1.5]
+    max_velocity: [0.3, 0.25, 1.5]
+    min_velocity: [-0.3, -0.25, -1.5]
     deadband_velocity: [0.0, 0.0, 0.0]
     velocity_timeout: 1.0
-    max_accel: [3.5, 0.0, 2.2]
-    max_decel: [-3.5, 0.0, -2.2]
+    max_accel: [1.0, 1.0, 2.0]
+    max_decel: [-1.0, -1.0, -2.0]
     odom_topic: "/odometry/filtered"
     odom_duration: 0.1
     use_realtime_priority: false
