@@ -152,12 +152,17 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Chessboard capture for camera calibration")
     parser.add_argument("--index", type=int, default=0)
     parser.add_argument("--port", type=int, default=8000)
+    # Calibrate at the resolution the ArUco node will use (it reads it from the .npz).
+    # 640x480 keeps ArUco ~3x lighter on the Pi than 1280x720.
+    parser.add_argument("--width", type=int, default=640)
+    parser.add_argument("--height", type=int, default=480)
     args = parser.parse_args()
 
-    camera = Camera(args.index)
+    camera = Camera(args.index, args.width, args.height)
     server = ThreadingHTTPServer(("0.0.0.0", args.port), StreamHandler)
     print(f"[INFO] {camera.count} image(s) already in ./{OUT_DIR}/")
-    print(f"[INFO] Open http://<pi-ip>:{args.port}/  and click Capture ~15-20 times")
+    print(f"[INFO] {args.width}x{args.height}. Open http://<pi-ip>:{args.port}/ and click Capture "
+          f"25-40 times: board in every corner and edge of the image, tilted +-30-45 deg")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
