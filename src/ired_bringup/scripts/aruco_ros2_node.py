@@ -77,10 +77,11 @@ Topics published:
 
 Parameters (set with --ros-args -p name:=value):
     camera_index      (int,    default 0)
-    frame_width        (int,    default 1280)
-    frame_height        (int,    default 720)
+    frame_width        (int,    default 0 = the calibration's resolution; 640 if none)
+    frame_height        (int,    default 0 = the calibration's resolution; 480 if none)
     aruco_dict          (string, default "DICT_ARUCO_ORIGINAL")
-    publish_rate        (double, default 15.0)   # Hz
+    publish_rate        (double, default 10.0)   # Hz
+    /aruco/image_raw is only drawn and published while something subscribes to it.
     camera_frame_id     (string, default "aruco_camera_link")  # must match your URDF link name
     base_frame_id       (string, default "base_link")
     calibration_file     (string, default "~/ired_ws/camera_calib/camera_calibration.npz")
@@ -216,10 +217,12 @@ class ArucoDetectorNode(Node):
         super().__init__("aruco_detector")
 
         self.declare_parameter("camera_index", 0)
-        self.declare_parameter("frame_width", 1280)
-        self.declare_parameter("frame_height", 720)
+        # 0 = use the resolution the calibration was made at (camera_calibration.npz).
+        # Calibrate at 640x480: ArUco is ~3x lighter there than at 1280x720 (PC test).
+        self.declare_parameter("frame_width", 0)
+        self.declare_parameter("frame_height", 0)
         self.declare_parameter("aruco_dict", "DICT_ARUCO_ORIGINAL")
-        self.declare_parameter("publish_rate", 15.0)
+        self.declare_parameter("publish_rate", 10.0)
         self.declare_parameter("camera_frame_id", "aruco_camera_link")
         self.declare_parameter("base_frame_id", "base_link")
         self.declare_parameter(
@@ -246,6 +249,8 @@ class ArucoDetectorNode(Node):
             data = np.load(calib_path)
             self.camera_matrix = data["camera_matrix"]
             self.dist_coeffs = data["dist_coeffs"]
+            self.calib_size = (int(data["image_width"]), int(data["image_height"])) \
+                if "image_width" in data.files else None
             self.have_calib = True
             self.get_logger().info(
                 f"Loaded camera calibration from {calib_path} "
@@ -289,8 +294,13 @@ class ArucoDetectorNode(Node):
             self.cap = cv2.VideoCapture(index)
         if not self.cap.isOpened():
             raise RuntimeError(f"Could not open camera index {index}")
+        if (not width or not height) and self.have_calib and getattr(self, "calib_size", None):
+            width, height = self.calib_size
+        width, height = width or 640, height or 480
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+        got = (int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)))
+        self.match_calibration(got)
 
         self.detector = ArucoDetectorCompat(dict_name)
 
@@ -302,6 +312,27 @@ class ArucoDetectorNode(Node):
             f"aruco_detector started: camera_index={index} dict={dict_name} "
             f"rate={rate}Hz -> /aruco/image_raw, /aruco/detections"
         )
+
+    def match_calibration(self, size):
+        """The camera matrix only fits the resolution it was calibrated at. Same aspect
+        ratio: scale it. Different aspect ratio (e.g. 1280x720 vs 640x480, a different part
+        of the sensor): distances and angles would be wrong, so leave them out and ask
+        for a calibration at this resolution."""
+        cs = getattr(self, "calib_size", None)
+        if not self.have_calib or cs is None or tuple(size) == tuple(cs):
+            return
+        sx, sy = size[0] / cs[0], size[1] / cs[1]
+        if abs(sx - sy) < 0.01:
+            self.camera_matrix = self.camera_matrix.copy()
+            self.camera_matrix[0, :] *= sx
+            self.camera_matrix[1, :] *= sy
+            self.get_logger().info(f"Calibration {cs[0]}x{cs[1]} scaled to {size[0]}x{size[1]}")
+        else:
+            self.have_calib = False
+            self.get_logger().warn(
+                f"Camera runs at {size[0]}x{size[1]} but the calibration is for {cs[0]}x{cs[1]}: "
+                f"distance/position/yaw left out. Calibrate again at this resolution "
+                f"(camera_calib_capture.py --width {size[0]} --height {size[1]}).")
 
     def estimate_marker_pose(self, corner):
         """Returns (distance_m, tvec_optical, rvec) for one marker's corners,
@@ -356,9 +387,13 @@ class ArucoDetectorNode(Node):
                 )
                 self._tf_warned = True
 
+        # The annotated image is ~2.7 MB per frame at 1280x720: only draw and send it
+        # while something subscribes (web app, rqt), not all the time.
+        want_image = self.image_pub.get_subscription_count() > 0
         detections = []
         if ids is not None and len(ids) > 0:
-            cv2.aruco.drawDetectedMarkers(frame, corners, ids)
+            if want_image:
+                cv2.aruco.drawDetectedMarkers(frame, corners, ids)
             for c, marker_id in zip(corners, ids.flatten()):
                 pts = c.reshape(4, 2)
                 cx, cy = pts.mean(axis=0)
@@ -423,13 +458,27 @@ class ArucoDetectorNode(Node):
                             ))
                             det["marker_yaw_deg"] = round(float(yaw), 1)
 
-                cv2.putText(
-                    frame, label,
-                    (int(cx) - 40, int(cy) - 15),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2,
-                )
+                if want_image:
+                    cv2.putText(
+                        frame, label,
+                        (int(cx) - 40, int(cy) - 15),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2,
+                    )
                 detections.append(det)
 
+        if want_image:
+            self.publish_image(frame, now)
+
+        det_msg = String()
+        det_msg.data = json.dumps({
+            "camera_frame": self.camera_frame_id,
+            "base_frame": self.base_frame_id,
+            "camera_offset_from_base_m": camera_offset,
+            "markers": detections,
+        })
+        self.detections_pub.publish(det_msg)
+
+    def publish_image(self, frame, now):
         img_msg = Image()
         img_msg.header.stamp = now
         img_msg.header.frame_id = self.camera_frame_id
@@ -440,15 +489,6 @@ class ArucoDetectorNode(Node):
         img_msg.step = frame.shape[1] * 3
         img_msg.data = frame.tobytes()
         self.image_pub.publish(img_msg)
-
-        det_msg = String()
-        det_msg.data = json.dumps({
-            "camera_frame": self.camera_frame_id,
-            "base_frame": self.base_frame_id,
-            "camera_offset_from_base_m": camera_offset,
-            "markers": detections,
-        })
-        self.detections_pub.publish(det_msg)
 
     def destroy_node(self):
         self.cap.release()
