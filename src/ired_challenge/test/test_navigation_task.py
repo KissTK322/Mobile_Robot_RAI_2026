@@ -252,3 +252,45 @@ def test_drive_finishing_between_two_state_reads_is_not_a_failure():
         t += 0.1
     assert task.state == DONE
     assert not any('try 2' in l for l in logs), logs
+
+
+def test_escape_direction_points_away_from_close_obstacles():
+    from ired_challenge.escape import escape_direction
+    assert escape_direction([(2.0, 0.0)]) is None                      # nothing close
+    dx, dy = escape_direction([(0.2, 0.0)])
+    assert dx < -0.99 and abs(dy) < 1e-6                               # obstacle ahead -> back
+    # fence end ahead-left and box ahead-right: back off, mostly straight
+    dx, dy = escape_direction([(0.15, 0.15), (0.15, -0.30)])
+    assert dx < 0 and dy < 0                                           # the nearer one (left) pushes harder
+
+
+def test_robot_stuck_in_inflation_escapes_instead_of_retrying_forever():
+    # PC sim: every plan failed at once from inside the fence corner's inflation; the
+    # robot retried for 10 minutes. Two instant failures in a row must trigger escape().
+    class StuckNav(FakeNav):
+        stuck, escapes = True, 0
+
+        def go_to(self, x, y, yaw):
+            super().go_to(x, y, yaw)
+            if self.stuck:
+                self._state = 'failed'
+
+        def escape(self):
+            self.escapes += 1
+            self.stuck = False
+
+    robot = {'xy': (2.5, 1.5)}
+    nav = StuckNav(robot)
+    logs = []
+    task = NavigationTask(nav, F, log=logs.append)
+    task.red_done, task.state = True, 'PICK'
+    ref = FakeRefbox(['C_Z22', 'C_Z21'])
+    ref.red_seen = True
+    t = 0.0
+    while t < 120 and task.state != DONE:
+        ref.step(t, robot['xy'])
+        task.update(t, True, ref.remaining, (*robot['xy'], 0.0))
+        nav.step(0.1)
+        t += 0.1
+    assert nav.escapes == 1, logs
+    assert task.state == DONE and ref.remaining == []

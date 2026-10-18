@@ -11,7 +11,8 @@ the robot pose, and gives it a `nav` object with:
     go_to(x, y, yaw)   start driving to a pose in the map frame
     state()            'active' | 'succeeded' | 'failed'
     cancel()
-    clear_costmaps()"""
+    clear_costmaps()
+    escape()           optional: slide away from nearby obstacles (stuck in inflation)"""
 from ired_challenge.field import visit_order
 
 WAIT_GAME, RED_ZONE, PICK, DRIVE, DWELL, DONE = 'WAIT_GAME', 'RED_ZONE', 'PICK', 'DRIVE', 'DWELL', 'DONE'
@@ -37,6 +38,7 @@ class NavigationTask:
         self.t_inside = None
         self.visited = []
         self.deferred = []
+        self.fast_fails = 0                     # drives that failed at once, in a row
 
     # ---------------------------------------------------------------- helpers
     def _set(self, state, now):
@@ -90,6 +92,7 @@ class NavigationTask:
                 self.target = None
                 self._set(PICK, now)
             elif nav_state == 'failed' or now - self.t_state > self.drive_timeout:
+                self.fast_fails = self.fast_fails + 1 if nav_state == 'failed' and now - self.t_state < 2.0 else 0
                 self._retry(pose, now)
             return self.info()
 
@@ -119,6 +122,7 @@ class NavigationTask:
                 self._set(DWELL, now)
             elif nav_state in ('failed', 'succeeded') or now - self.t_state > self.drive_timeout:
                 why = 'timeout' if nav_state == 'active' else f'drive {nav_state}'
+                self.fast_fails = self.fast_fails + 1 if nav_state == 'failed' and now - self.t_state < 2.0 else 0
                 self.log(f'{self.target}: {why} at ({pose[0]:.2f}, {pose[1]:.2f})')
                 self._retry(pose, now)
             return self.info()
@@ -146,6 +150,11 @@ class NavigationTask:
 
     def _retry(self, pose, now):
         self.nav.cancel()
+        if self.fast_fails >= 2 and hasattr(self.nav, 'escape'):
+            # Plans fail at once: the robot is inside an obstacle's inflation. Move it out first.
+            self.log(f'Drives fail at once at ({pose[0]:.2f}, {pose[1]:.2f}): sliding away from obstacles')
+            self.nav.escape()
+            self.fast_fails = 0
         self.tries += 1
         zone = self.target
         if self.tries <= self.retries:

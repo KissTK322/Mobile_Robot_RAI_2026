@@ -5,31 +5,38 @@ Needs ired_bringup, ired_navigation (Nav2 + AMCL on the field map) and
 ired_refbox (mqtt_refbox) running. Publishes its state as JSON on
 /challenge/navigation/state for the web app and for logging."""
 import json
+import math
 import threading
 import time
 
 import rclpy
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, TwistStamped
 from nav2_simple_commander.robot_navigator import BasicNavigator, TaskResult
 from rclpy.executors import SingleThreadedExecutor
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
 from rclpy.time import Time
+from nav_msgs.msg import OccupancyGrid
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
+from sensor_msgs.msg import LaserScan
 from refbox_msgs.msg import GamePlay, MachineInfoData, NavigationRoutesData
 from std_msgs.msg import String
 from tf2_ros import Buffer, TransformException, TransformListener
 from tf_transformations import euler_from_quaternion, quaternion_from_euler
 
-from ired_challenge.field import Field
+from ired_challenge.escape import escape_direction, nearest
+from ired_challenge.field import Field, mps_footprint
 from ired_challenge.navigation_task import NavigationTask
 
 
 class Nav2Adapter:
     """The small interface NavigationTask expects, on top of nav2_simple_commander."""
 
-    def __init__(self, navigator):
+    def __init__(self, navigator, escape=None):
         self.n = navigator
         self.active = False
         self.last = 'succeeded'
+        self._escape = escape
 
     def go_to(self, x, y, yaw):
         p = PoseStamped()
@@ -61,6 +68,10 @@ class Nav2Adapter:
     def clear_costmaps(self):
         self.n.clearAllCostmaps()
 
+    def escape(self):
+        if self._escape:
+            self._escape()
+
 
 class NavigationChallengeNode(Node):
     def __init__(self):
@@ -70,6 +81,8 @@ class NavigationChallengeNode(Node):
             ('dwell', 5.5), ('confirm_timeout', 4.0), ('drive_timeout', 40.0), ('retries', 2),
             ('order', 'nearest'), ('avoid_mps_zones', True), ('rate', 10.0),
             ('map_frame', 'map'), ('base_frame', 'base_footprint'),
+            ('escape_speed', 0.06), ('escape_time', 3.0), ('escape_clearance', 0.30),
+            ('scan_topic', '/scan_filtered'), ('cmd_vel_topic', '/cmd_vel'),
         ])
         g = {x.name: x.value for x in p}
         self.cfg = g
@@ -78,10 +91,18 @@ class NavigationChallengeNode(Node):
         self.remaining = None
         self.had_routes = False
         self.mps_zones = []
+        self.mps_boxes = []          # (x, y, rotation) of each machine, map frame
+        self.scan = None
+        self.costmap = None          # the planner's view: walls, boxes and LiDAR, inflated
 
         self.create_subscription(GamePlay, '/refbox/game_play', self.on_game, 10)
         self.create_subscription(NavigationRoutesData, '/refbox/navigation_routes', self.on_routes, 10)
         self.create_subscription(MachineInfoData, '/refbox/machine_info', self.on_machines, 10)
+        self.create_subscription(LaserScan, g['scan_topic'], lambda m: setattr(self, 'scan', m), qos_profile_sensor_data)
+        self.cmd_pub = self.create_publisher(TwistStamped, g['cmd_vel_topic'], 10)
+        self.create_subscription(OccupancyGrid, '/global_costmap/costmap', lambda m: setattr(self, 'costmap', m),
+                                 QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
+                                            durability=DurabilityPolicy.TRANSIENT_LOCAL))
         self.state_pub = self.create_publisher(String, '/challenge/navigation/state', 10)
         self.tf = Buffer()
         TransformListener(self.tf, self)
@@ -93,7 +114,7 @@ class NavigationChallengeNode(Node):
         # navigation.yaml (or the web app), so wait only for the lifecycle nodes to be active.
         self.navigator.waitUntilNav2Active(localizer='controller_server')
         self.task = NavigationTask(
-            Nav2Adapter(self.navigator), self.field, log=self.get_logger().info,
+            Nav2Adapter(self.navigator, self.escape), self.field, log=self.get_logger().info,
             red_zone=g['red_zone'], dwell=g['dwell'], confirm_timeout=g['confirm_timeout'],
             drive_timeout=g['drive_timeout'], retries=g['retries'], order=g['order'])
         self.get_logger().info(f"Navigation challenge ready (order={g['order']}, red zone {g['red_zone']})")
@@ -109,14 +130,83 @@ class NavigationChallengeNode(Node):
         self.remaining = zones if self.had_routes else None
 
     def on_machines(self, msg):
-        zones = []
+        zones, boxes = [], []
         for m in msg.machines:
             try:
-                self.field.parse(m.zone)
-                zones.append(m.zone)
+                cx, cy = self.field.center(m.zone)
             except ValueError:
-                pass
+                continue
+            zones.append(m.zone)
+            boxes.append((cx, cy, float(m.rotation)))
         self.mps_zones = zones
+        self.mps_boxes = boxes
+
+    def obstacle_points(self, pose):
+        """Nearby obstacle points in the robot frame: LiDAR (laser assumed at the robot
+        centre, as on the iRED) plus the MPS boxes the LiDAR scans over."""
+        pts = []
+        sc = self.scan
+        if sc is not None:
+            try:
+                t = self.tf.lookup_transform(self.cfg['base_frame'], sc.header.frame_id, Time())
+                q = t.transform.rotation
+                lyaw = euler_from_quaternion([q.x, q.y, q.z, q.w])[2]
+                lx, ly = t.transform.translation.x, t.transform.translation.y
+            except TransformException:
+                lyaw, lx, ly = 0.0, 0.0, 0.0
+            for i, r in enumerate(sc.ranges):
+                if sc.range_min < r < 1.0:
+                    a = sc.angle_min + i * sc.angle_increment + lyaw
+                    pts.append((lx + r * math.cos(a), ly + r * math.sin(a)))
+        x, y, yaw = pose
+        c, s = math.cos(-yaw), math.sin(-yaw)
+        cm = self.costmap
+        if cm is not None:
+            # lethal cells (100) are the obstacles themselves: map walls, MPS boxes, LiDAR hits
+            res, ox, oy, w = cm.info.resolution, cm.info.origin.position.x, cm.info.origin.position.y, cm.info.width
+            r_cells = int(0.6 / res)
+            ci, cj = int((x - ox) / res), int((y - oy) / res)
+            for j in range(max(0, cj - r_cells), min(cm.info.height, cj + r_cells + 1)):
+                for i in range(max(0, ci - r_cells), min(w, ci + r_cells + 1)):
+                    if cm.data[j * w + i] >= 100:
+                        dx, dy = ox + (i + 0.5) * res - x, oy + (j + 0.5) * res - y
+                        pts.append((c * dx - s * dy, s * dx + c * dy))
+        for bx, by, rot in self.mps_boxes:
+            for px, py in mps_footprint((bx, by), rot, margin=0.0, step=0.05):
+                dx, dy = px - x, py - y
+                pts.append((c * dx - s * dy, s * dx + c * dy))
+        return pts
+
+    def escape(self):
+        """Slide slowly away from nearby obstacles until clear (or escape_time)."""
+        g = self.cfg
+        t_end = time.monotonic() + g['escape_time']
+        moved = False
+        while time.monotonic() < t_end and rclpy.ok():
+            pose = self.pose()
+            if pose is None:
+                break
+            pts = self.obstacle_points(pose)
+            if nearest(pts) >= g['escape_clearance']:
+                break
+            d = escape_direction(pts, radius=g['escape_clearance'] + 0.15)
+            if d is None:
+                break
+            cmd = TwistStamped()
+            cmd.header.stamp = self.get_clock().now().to_msg()
+            cmd.header.frame_id = g['base_frame']
+            cmd.twist.linear.x, cmd.twist.linear.y = d[0] * g['escape_speed'], d[1] * g['escape_speed']
+            self.cmd_pub.publish(cmd)
+            moved = True
+            time.sleep(0.1)
+        stop = TwistStamped()
+        stop.header.stamp = self.get_clock().now().to_msg()
+        stop.header.frame_id = g['base_frame']
+        self.cmd_pub.publish(stop)
+        pose = self.pose()
+        if pose:
+            self.get_logger().info(f'Escape {"done" if moved else "not needed"}: at ({pose[0]:.2f}, {pose[1]:.2f}), '
+                                   f'nearest obstacle {nearest(self.obstacle_points(pose)):.2f} m')
 
     def pose(self):
         try:
