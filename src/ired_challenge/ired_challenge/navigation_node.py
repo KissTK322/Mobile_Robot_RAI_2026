@@ -80,7 +80,10 @@ class NavigationChallengeNode(Node):
 
         self.navigator = BasicNavigator(node_name='navigation_challenge_navigator')
         self.get_logger().info('Waiting for Nav2 to be active...')
-        self.navigator.waitUntilNav2Active(localizer='amcl')
+        # localizer='amcl' would make BasicNavigator publish its default initial pose (0, 0)
+        # until AMCL answers, which throws AMCL out of the field. AMCL gets its start pose from
+        # navigation.yaml (or the web app), so wait only for the lifecycle nodes to be active.
+        self.navigator.waitUntilNav2Active(localizer='controller_server')
         self.task = NavigationTask(
             Nav2Adapter(self.navigator), self.field, log=self.get_logger().info,
             red_zone=g['red_zone'], dwell=g['dwell'], confirm_timeout=g['confirm_timeout'],
