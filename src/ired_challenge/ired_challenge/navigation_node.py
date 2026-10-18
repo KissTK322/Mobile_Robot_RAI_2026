@@ -93,6 +93,56 @@ class Nav2Adapter:
             self._escape()
 
 
+def wait_nav2_active(navigator, log, nodes=('controller_server', 'planner_server', 'bt_navigator'),
+                     reply_timeout=2.0, kick_after=30.0,
+                     managers=('lifecycle_manager_localization', 'lifecycle_manager_navigation')):
+    """Wait until the Nav2 servers are active.
+
+    BasicNavigator.waitUntilNav2Active() waits for each get_state reply with no timeout;
+    when a reply is lost the node hangs forever (5 of 28 starts in the PC sim). Here a
+    lost reply only costs reply_timeout seconds and the question is asked again.
+    If a server is still not active after kick_after seconds (Nav2's own start-up got
+    stuck: 1 of 20 starts in the sim), the lifecycle managers are asked to start up
+    again, once per kick_after."""
+    from lifecycle_msgs.srv import GetState
+    from nav2_msgs.srv import ManageLifecycleNodes
+
+    def kick():
+        for m in managers:
+            cli = navigator.create_client(ManageLifecycleNodes, f'{m}/manage_nodes')
+            if cli.wait_for_service(timeout_sec=2.0):
+                req = ManageLifecycleNodes.Request()
+                req.command = ManageLifecycleNodes.Request.STARTUP
+                fut = cli.call_async(req)
+                rclpy.spin_until_future_complete(navigator, fut, timeout_sec=15.0)
+                ok = fut.done() and fut.result() is not None and fut.result().success
+                log(f'{m}: start-up requested again -> {"ok" if ok else "no answer / failed"}')
+            navigator.destroy_client(cli)
+
+    for name in nodes:
+        cli = navigator.create_client(GetState, f'{name}/get_state')
+        tries, t_wait = 0, time.monotonic()
+        while rclpy.ok():
+            if not cli.wait_for_service(timeout_sec=1.0):
+                log(f'{name}/get_state not available, waiting...')
+                continue
+            fut = cli.call_async(GetState.Request())
+            rclpy.spin_until_future_complete(navigator, fut, timeout_sec=reply_timeout)
+            label = fut.result().current_state.label if fut.done() and fut.result() is not None else None
+            if label == 'active':
+                break
+            tries += 1
+            if tries % 5 == 0:
+                log(f'{name} is {label or "not answering"}, still waiting...')
+            if time.monotonic() - t_wait > kick_after:
+                log(f'{name} still {label or "not answering"} after {kick_after:.0f} s: asking Nav2 to start up again')
+                kick()
+                t_wait = time.monotonic()
+            time.sleep(0.5)
+        navigator.destroy_client(cli)
+    log('Nav2 is active')
+
+
 class NavigationChallengeNode(Node):
     def __init__(self):
         super().__init__('navigation_challenge')
@@ -136,7 +186,7 @@ class NavigationChallengeNode(Node):
         # localizer='amcl' would make BasicNavigator publish its default initial pose (0, 0)
         # until AMCL answers, which throws AMCL out of the field. AMCL gets its start pose from
         # navigation.yaml (or the web app), so wait only for the lifecycle nodes to be active.
-        self.navigator.waitUntilNav2Active(localizer='controller_server')
+        wait_nav2_active(self.navigator, self.get_logger().info)
         self.task = NavigationTask(
             Nav2Adapter(self.navigator, self.escape), self.field, log=self.get_logger().info,
             red_zone=g['red_zone'], dwell=g['dwell'], confirm_timeout=g['confirm_timeout'],

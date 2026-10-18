@@ -16,6 +16,8 @@
   <exec_depend>refbox_msgs</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
   <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>lifecycle_msgs</exec_depend>
+  <exec_depend>nav2_msgs</exec_depend>
   <exec_depend>sensor_msgs_py</exec_depend>
   <test_depend>python3-pytest</test_depend>
 
