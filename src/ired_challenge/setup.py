@@ -26,6 +26,7 @@ setup(
         'console_scripts': [
             'navigation_challenge = ired_challenge.navigation_node:main',
             'mps_obstacles = ired_challenge.mps_obstacles_node:main',
+            'exploration_challenge = ired_challenge.exploration_node:main',
         ],
     },
 )
