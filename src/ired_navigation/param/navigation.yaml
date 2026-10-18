@@ -1,10 +1,10 @@
 amcl:
   ros__parameters:
-    alpha1: 0.4
-    alpha2: 0.4
-    alpha3: 0.1
-    alpha4: 0.1
-    alpha5: 0.1 
+    alpha1: 0.1
+    alpha2: 0.05
+    alpha3: 0.05
+    alpha4: 0.05
+    alpha5: 0.1
     base_frame_id: "base_footprint"
     beam_skip_distance: 0.5
     beam_skip_error_threshold: 0.9
@@ -12,29 +12,29 @@ amcl:
     do_beamskip: false
     global_frame_id: "map"
     lambda_short: 0.1
-    laser_likelihood_max_dist: 3.5  
+    laser_likelihood_max_dist: 1.0
     laser_max_range: 6.0   
     laser_min_range: -0.1   
     laser_model_type: "likelihood_field"
-    max_beams: 200
-    max_particles: 2000
-    min_particles: 500
+    max_beams: 90
+    max_particles: 1000
+    min_particles: 200
     odom_frame_id: "odom"
     pf_err: 0.05
     pf_z: 0.99
-    recovery_alpha_fast: 0.1
-    recovery_alpha_slow: 0.001 
+    recovery_alpha_fast: 0.0   # no random particles: a square room has 4 look-alike corners
+    recovery_alpha_slow: 0.0
     resample_interval: 1
     robot_model_type: "nav2_amcl::OmniMotionModel"
     save_pose_rate: 2.0   
-    sigma_hit: 0.12  
+    sigma_hit: 0.07
     tf_broadcast: true
     transform_tolerance: 0.5
-    update_min_a: 0.15  
-    update_min_d: 0.08  
-    z_hit: 0.65   
+    update_min_a: 0.1
+    update_min_d: 0.05
+    z_hit: 0.85
     z_max: 0.05
-    z_rand: 0.25  
+    z_rand: 0.15
     z_short: 0.05
     scan_topic: scan_filtered
     map_topic: map
@@ -110,42 +110,42 @@ controller_server:
     controller_plugins: ["FollowPath"]
     progress_checker:
       plugin: "nav2_controller::SimpleProgressChecker"
-      required_movement_radius: 0.05
-      movement_time_allowance: 15.0
+      required_movement_radius: 0.3
+      movement_time_allowance: 10.0
     goal_checker:
       stateful: true
       plugin: "nav2_controller::SimpleGoalChecker"
-      xy_goal_tolerance: 0.15
-      yaw_goal_tolerance: 0.5
+      xy_goal_tolerance: 0.10   # zone centre; zones are 1 m
+      yaw_goal_tolerance: 0.6   # heading does not matter in a zone: no final spin
     FollowPath:
       plugin: "dwb_core::DWBLocalPlanner"
-      debug_trajectory_details: true
+      debug_trajectory_details: false
       min_vel_x: -0.25
       min_vel_y: -0.25
-      max_vel_x: 0.3
+      max_vel_x: 0.25
       max_vel_y: 0.25
       max_vel_theta: 1.0
-      min_speed_xy: 0.05
-      max_speed_xy: 0.3
-      min_speed_theta: 0.4
-      acc_lim_x: 1.0
-      acc_lim_y: 1.0
+      min_speed_xy: 0.0
+      max_speed_xy: 0.25   # also caps diagonal moves
+      min_speed_theta: 0.0
+      acc_lim_x: 0.8
+      acc_lim_y: 0.8
       acc_lim_theta: 2.0
-      decel_lim_x: -1.0
-      decel_lim_y: -1.0
+      decel_lim_x: -0.8
+      decel_lim_y: -0.8
       decel_lim_theta: -2.0
       vx_samples: 8
       vy_samples: 8
-      vtheta_samples: 12
-      sim_time: 1.5
+      vtheta_samples: 10
+      sim_time: 1.0
       linear_granularity: 0.05
-      angular_granularity: 0.025
+      angular_granularity: 0.05
       transform_tolerance: 0.2
-      xy_goal_tolerance: 0.15
-      trans_stopped_velocity: 0.25
+      xy_goal_tolerance: 0.10
+      trans_stopped_velocity: 0.05
       short_circuit_trajectory_evaluation: true
       stateful: true
-      critics: ["RotateToGoal", "Oscillation", "BaseObstacle", "GoalAlign", "PathAlign", "PathDist", "GoalDist"]
+      critics: ["RotateToGoal", "BaseObstacle", "GoalAlign", "PathAlign", "PathDist", "GoalDist", "Twirling"]   # Oscillation dropped: stop-and-go near goals
       BaseObstacle.scale: 0.02
       PathAlign.scale: 32.0
       PathAlign.forward_point_distance: 0.1
@@ -156,6 +156,7 @@ controller_server:
       RotateToGoal.scale: 32.0
       RotateToGoal.slowing_factor: 5.0
       RotateToGoal.lookahead_time: -1.0
+      Twirling.scale: 5.0          # holonomic: do not spin while strafing
     enable_stamped_cmd_vel: true
 
 local_costmap:
@@ -270,13 +271,22 @@ map_saver:
 
 planner_server:
   ros__parameters:
-    expected_planner_frequency: 10.0
+    expected_planner_frequency: 5.0
     planner_plugins: ["GridBased"]
     GridBased:
-      plugin: "nav2_navfn_planner::NavfnPlanner"
-      tolerance: 0.5
-      use_astar: false
-      allow_unknown: true
+      # Smac 2D: 8-connected A* with its own smoother; paths stay centred between boxes and walls
+      plugin: "nav2_smac_planner::SmacPlanner2D"
+      tolerance: 0.10
+      downsample_costmap: false
+      allow_unknown: false
+      max_planning_time: 0.5
+      cost_travel_multiplier: 2.0
+      use_final_approach_orientation: false
+      smoother:
+        max_iterations: 1000
+        w_smooth: 0.3
+        w_data: 0.2
+        tolerance: 1.0e-10
 
 behavior_server:
   ros__parameters:
@@ -410,14 +420,14 @@ collision_monitor:
 velocity_smoother:
   ros__parameters:
     smoothing_frequency: 20.0
-    scale_velocities: false
+    scale_velocities: true    # keep the direction of travel while accelerating (omni)
     feedback: "OPEN_LOOP"
-    max_velocity: [0.3, 0.25, 1.5]
-    min_velocity: [-0.3, -0.25, -1.5]
-    deadband_velocity: [0.0, 0.0, 0.0]
-    velocity_timeout: 1.0
-    max_accel: [1.0, 1.0, 2.0]
-    max_decel: [-1.0, -1.0, -2.0]
+    max_velocity: [0.25, 0.25, 1.0]
+    min_velocity: [-0.25, -0.25, -1.0]
+    deadband_velocity: [0.02, 0.02, 0.05]
+    velocity_timeout: 0.5
+    max_accel: [0.6, 0.6, 1.5]   # slip-safe; DWB limits slightly above
+    max_decel: [-0.8, -0.8, -2.0]
     odom_topic: "/odometry/filtered"
     odom_duration: 0.1
     use_realtime_priority: false
