@@ -75,12 +75,15 @@ class Nav2Adapter:
         return self.last
 
     def cancel(self):
-        if self.active:
-            self.n.cancelTask()
-            # Wait for the old goal to end before a new one is sent: a late cancel
-            # otherwise reaches bt_navigator after the new goal and aborts that one.
-            deadline = time.monotonic() + 2.0
-            while not self.n.isTaskComplete() and time.monotonic() < deadline:
+        if self.active and rclpy.ok():
+            try:
+                self.n.cancelTask()
+                # Wait for the old goal to end before a new one is sent: a late cancel
+                # otherwise reaches bt_navigator after the new goal and aborts that one.
+                deadline = time.monotonic() + 2.0
+                while rclpy.ok() and not self.n.isTaskComplete() and time.monotonic() < deadline:
+                    time.sleep(0.02)
+            except Exception:           # shutting down: nothing left to cancel
                 pass
         self.active = False
         self.last = 'failed'
@@ -344,9 +347,15 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     finally:
-        node.task.nav.cancel()
-        node.navigator.destroy_node()
-        node.destroy_node()
+        # On Ctrl-C / SIGTERM rclpy is already shut down: cancelling then hung in a busy
+        # loop at 30 % CPU forever (found as leftover processes in the PC sim).
+        try:
+            if rclpy.ok():
+                node.task.nav.cancel()
+            node.navigator.destroy_node()
+            node.destroy_node()
+        except Exception:
+            pass
         if rclpy.ok():
             rclpy.shutdown()
 

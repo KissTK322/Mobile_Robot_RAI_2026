@@ -49,7 +49,8 @@ class Mover(Nav2Adapter):
     def cancel(self):
         if self.turn_goal is not None:
             self.turn_goal = None
-            self.node.send_cmd(0.0)
+            if rclpy.ok():
+                self.node.send_cmd(0.0)
         super().cancel()
 
     def state(self):
@@ -187,9 +188,14 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     finally:
-        node.task.nav.cancel()
-        node.navigator.destroy_node()
-        node.destroy_node()
+        # see navigation_node.main: never cancel after rclpy has shut down
+        try:
+            if rclpy.ok():
+                node.task.nav.cancel()
+            node.navigator.destroy_node()
+            node.destroy_node()
+        except Exception:
+            pass
         if rclpy.ok():
             rclpy.shutdown()
 
