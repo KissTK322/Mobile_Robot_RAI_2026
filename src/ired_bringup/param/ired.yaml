@@ -33,6 +33,11 @@ odom_node:
     odom_tf_publish: false
     rpm_to_mps: 0.00680678
     wheel_radius: 0.065
+    # wheel-slip aware twist covariance for the EKF (see slip_residual in odom.py)
+    twist_var_xy: 0.0025
+    twist_var_yaw: 0.01
+    slip_gain_xy: 4.0
+    slip_gain_yaw: 25.0
 
 iredcr_modbus_node:
   ros__parameters:

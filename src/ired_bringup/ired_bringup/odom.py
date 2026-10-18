@@ -6,9 +6,32 @@ from geometry_msgs.msg import TwistStamped, TransformStamped
 from ired_msgs.msg import IMUData, MotorData
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import JointState
+from std_msgs.msg import Float32
 from tf2_msgs.msg import TFMessage
 from tf_transformations import quaternion_from_euler
 from math import sin, cos, isnan
+
+
+def slip_residual(rpm, rpm_to_mps):
+    """Wheel-slip signal in m/s for the 4-wheel X-omni base.
+
+    Four wheels for three body velocities leave one combination that no real
+    motion produces: (fl - fr - rl + rr) is zero for every (vx, vy, wz) of the
+    kinematics, so anything left is slip or a wheel not following its setpoint."""
+    fl, fr, rl, rr = rpm
+    return 0.5 * rpm_to_mps * (fl - fr - rl + rr)
+
+
+def twist_covariance(slip, var_xy, var_yaw, gain_xy, gain_yaw, var_max=1.0):
+    """Odometry twist covariance that grows with slip, so the EKF leans on the IMU
+    (and later the LiDAR) when the wheels are not telling the truth."""
+    vxy = min(var_xy + gain_xy * slip * slip, var_max)
+    vyaw = min(var_yaw + gain_yaw * slip * slip, var_max)
+    cov = [0.0] * 36
+    cov[0] = cov[7] = vxy
+    cov[14] = cov[21] = cov[28] = 1e6        # z, roll, pitch: not measured
+    cov[35] = vyaw
+    return cov
 
 class ODOM(Node):
     def __init__(self):
@@ -20,6 +43,7 @@ class ODOM(Node):
         
         # Initialise ROS Publisher and Subscriber
         self.odom_data_pub = self.create_publisher(Odometry, self.odom_topic, 10)
+        self.slip_pub = self.create_publisher(Float32, '/ired/slip', 10)
         self.joint_states_pub = self.create_publisher(JointState, self.joint_state_topic, 10)
         self.tf_pub = self.create_publisher(TFMessage, '/tf', 10)
         self.create_subscription(MotorData, self.motor_data_topic, self.fetchMotorDataCallback, 10)
@@ -47,6 +71,11 @@ class ODOM(Node):
         self.declare_parameter("odom_tf_publish", True)
         self.declare_parameter("rpm_to_mps", 0.003560471674)
         self.declare_parameter("wheel_radius", 0.34)
+        # twist covariance: base variances and how fast they grow with the slip signal
+        self.declare_parameter("twist_var_xy", 0.0025)       # (0.05 m/s)^2
+        self.declare_parameter("twist_var_yaw", 0.01)        # (0.1 rad/s)^2
+        self.declare_parameter("slip_gain_xy", 4.0)
+        self.declare_parameter("slip_gain_yaw", 25.0)
         
         # ROS Parameters
         self.odom_topic = self.get_parameter('odom_topic').get_parameter_value().string_value
@@ -57,6 +86,10 @@ class ODOM(Node):
         self.odom_tf_publish = self.get_parameter('odom_tf_publish').get_parameter_value().bool_value
         self.rpm_to_mps = self.get_parameter('rpm_to_mps').get_parameter_value().double_value
         self.wheel_radius = self.get_parameter('wheel_radius').get_parameter_value().double_value
+        self.twist_var_xy = self.get_parameter('twist_var_xy').get_parameter_value().double_value
+        self.twist_var_yaw = self.get_parameter('twist_var_yaw').get_parameter_value().double_value
+        self.slip_gain_xy = self.get_parameter('slip_gain_xy').get_parameter_value().double_value
+        self.slip_gain_yaw = self.get_parameter('slip_gain_yaw').get_parameter_value().double_value
     
     def initial_variables(self):
         pcov = [ 0.1, 0,   0,   0,   0, 0,
@@ -69,7 +102,8 @@ class ODOM(Node):
         self.odom_data.header.frame_id  = "odom"
         self.odom_data.child_frame_id = "base_footprint"
         self.odom_data.pose.covariance = pcov
-        self.odom_data.twist.covariance = pcov
+        self.odom_data.twist.covariance = twist_covariance(0.0, 0.0025, 0.01, 0.0, 0.0)
+        self.slip = 0.0
         self.joint_states = JointState()
         self.joint_states.header.frame_id = "base_footprint"
 
@@ -185,6 +219,11 @@ class ODOM(Node):
             self.angular_z = 0.0
 
         self.updateOdometry(duration)
+        # slip signal, smoothed over ~2 samples (10 Hz encoder data is coarse)
+        self.slip = 0.5 * self.slip + 0.5 * slip_residual(self.wheel_speed_cmd, self.rpm_to_mps)
+        self.odom_data.twist.covariance = twist_covariance(
+            self.slip, self.twist_var_xy, self.twist_var_yaw, self.slip_gain_xy, self.slip_gain_yaw)
+        self.slip_pub.publish(Float32(data=float(self.slip)))
         self.odom_data.header.stamp = time_now.to_msg()
         self.odom_data_pub.publish(self.odom_data)
 
