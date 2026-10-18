@@ -77,15 +77,19 @@ class NavigationTask:
                 self._set(PICK, now)
             return self.info()
 
+        # Read the drive state once per update: it can change between two calls
+        # (Nav2 finishing in between made a reached zone look like a failed drive).
+        nav_state = self.nav.state() if self.state in (RED_ZONE, DRIVE) else None
+
         if self.state == RED_ZONE:
             # Passing through is enough: done as soon as the robot is inside it
-            if self.field.inside(self.red_zone, pose[0], pose[1], margin=0.1) or self.nav.state() == 'succeeded':
+            if self.field.inside(self.red_zone, pose[0], pose[1], margin=0.1) or nav_state == 'succeeded':
                 self.nav.cancel()
                 self.red_done = True
                 self.log('Red zone passed')
                 self.target = None
                 self._set(PICK, now)
-            elif self.nav.state() == 'failed' or now - self.t_state > self.drive_timeout:
+            elif nav_state == 'failed' or now - self.t_state > self.drive_timeout:
                 self._retry(pose, now)
             return self.info()
 
@@ -110,10 +114,12 @@ class NavigationTask:
             if self.target not in remaining:            # refbox already counted it
                 self.nav.cancel()
                 self._visited(now)
-            elif self.nav.state() == 'succeeded' and self.field.inside(self.target, pose[0], pose[1], margin=0.05):
+            elif nav_state == 'succeeded' and self.field.inside(self.target, pose[0], pose[1], margin=0.05):
                 self.t_inside = now
                 self._set(DWELL, now)
-            elif self.nav.state() in ('failed', 'succeeded') or now - self.t_state > self.drive_timeout:
+            elif nav_state in ('failed', 'succeeded') or now - self.t_state > self.drive_timeout:
+                why = 'timeout' if nav_state == 'active' else f'drive {nav_state}'
+                self.log(f'{self.target}: {why} at ({pose[0]:.2f}, {pose[1]:.2f})')
                 self._retry(pose, now)
             return self.info()
 

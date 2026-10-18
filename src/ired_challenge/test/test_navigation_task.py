@@ -200,3 +200,41 @@ def test_unconfirmed_zone_is_retried_not_skipped_silently():
     task, ref, nav, logs, _ = simulate(['C_Z11'], confirm=False, max_time=60)
     assert task.state != DONE
     assert any('did not confirm' in l for l in logs)
+
+
+def test_drive_finishing_between_two_state_reads_is_not_a_failure():
+    # Seen in the PC simulation: Nav2's result arrived between two state() calls in one
+    # update, so a reached zone was retried three times and given up.
+    class FlakyReadNav(FakeNav):
+        pending = False
+
+        def state(self):
+            s = self._state
+            if self.pending:                  # result arrives right after this read
+                self.pending, self._state = False, 'succeeded'
+            return s
+
+        def step(self, dt):
+            super().step(dt)
+            if self._state == 'succeeded' and self.goal is not None and not self.reported:
+                self.reported, self.pending, self._state = True, True, 'active'
+
+        def go_to(self, x, y, yaw):
+            super().go_to(x, y, yaw)
+            self.reported = False
+
+    robot = {'xy': (2.5, 1.5)}
+    nav = FlakyReadNav(robot)
+    logs = []
+    task = NavigationTask(nav, F, log=logs.append)
+    task.red_done, task.state = True, 'PICK'
+    ref = FakeRefbox(['C_Z22'])
+    ref.red_seen = True
+    t = 0.0
+    while t < 60 and task.state != DONE:
+        ref.step(t, robot['xy'])
+        task.update(t, True, ref.remaining, (*robot['xy'], 0.0))
+        nav.step(0.1)
+        t += 0.1
+    assert task.state == DONE
+    assert not any('try 2' in l for l in logs), logs
