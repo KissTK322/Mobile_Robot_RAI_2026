@@ -5,10 +5,13 @@ Needs ired_bringup, ired_navigation (Nav2 + AMCL on the field map) and
 ired_refbox (mqtt_refbox) running. Publishes its state as JSON on
 /challenge/navigation/state for the web app and for logging."""
 import json
+import threading
+import time
 
 import rclpy
 from geometry_msgs.msg import PoseStamped
 from nav2_simple_commander.robot_navigator import BasicNavigator, TaskResult
+from rclpy.executors import SingleThreadedExecutor
 from rclpy.node import Node
 from rclpy.time import Time
 from refbox_msgs.msg import GamePlay, MachineInfoData, NavigationRoutesData
@@ -88,7 +91,6 @@ class NavigationChallengeNode(Node):
             Nav2Adapter(self.navigator), self.field, log=self.get_logger().info,
             red_zone=g['red_zone'], dwell=g['dwell'], confirm_timeout=g['confirm_timeout'],
             drive_timeout=g['drive_timeout'], retries=g['retries'], order=g['order'])
-        self.create_timer(1.0 / g['rate'], self.step)
         self.get_logger().info(f"Navigation challenge ready (order={g['order']}, red zone {g['red_zone']})")
 
     def on_game(self, msg):
@@ -136,8 +138,19 @@ class NavigationChallengeNode(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = NavigationChallengeNode()
+    # step() runs in this thread, not as a timer callback: BasicNavigator spins its own node
+    # while it sends a goal, and doing that inside a callback raises "Executor is already
+    # spinning". The subscriptions (refbox, TF) are served by their own executor in a thread,
+    # so the pose stays current while step() waits on Nav2.
+    executor = SingleThreadedExecutor()
+    executor.add_node(node)
+    threading.Thread(target=executor.spin, daemon=True).start()
+    period = 1.0 / node.cfg['rate']
     try:
-        rclpy.spin(node)
+        while rclpy.ok():
+            t = time.monotonic()
+            node.step()
+            time.sleep(max(0.0, period - (time.monotonic() - t)))
     except KeyboardInterrupt:
         pass
     finally:
