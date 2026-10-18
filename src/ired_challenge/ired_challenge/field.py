@@ -51,20 +51,47 @@ class Field:
         half = self.size / 2 - margin
         return abs(px - cx) <= half and abs(py - cy) <= half
 
-    def goal_in_zone(self, zone, from_xy, blocked_zones=(), robot_radius=0.22, mps_half_diag=0.15):
+    def goal_in_zone(self, zone, from_xy, blocked_zones=(), robot_radius=0.22, mps_half_diag=0.15,
+                     wall_gap=0.08, step=0.02):
         """Point to drive to inside `zone`.
 
         Normally the zone centre. If an MPS station stands in the zone (its centre
-        is taken as the zone centre), stop beside it instead: on the side facing
-        `from_xy`, far enough from the box for the robot to fit but still inside
-        the zone."""
+        is taken as the zone centre), stop beside it instead: clear of the box in any
+        rotation, and as deep inside the zone as that allows, because the refbox
+        counts the pose the robot reports and a goal near the zone edge plus Nav2's
+        goal tolerance plus AMCL error can end up outside (seen in the PC sim: the
+        old side point was 10 cm from the edge, the robot stopped 2 cm inside and
+        the refbox never counted the zone). A field wall on a side of the zone takes
+        the robot radius off that side too. Of the best points, the one nearest
+        `from_xy` wins."""
         cx, cy = self.center(zone)
         if zone not in blocked_zones:
             return cx, cy
-        offset = min(robot_radius + mps_half_diag + 0.03, self.size / 2 - 0.08)
+        half = self.size / 2
+        clear = robot_radius + mps_half_diag + 0.03
+        _, zx, zy = self.parse(zone)
+        sx = -1 if zone.startswith('M') else 1       # magenta zones are mirrored in x
+        # wall on each side: robot centre must keep robot_radius + wall_gap from it
+        wall = {'-x': zx == 1 if sx > 0 else zx == self.columns, '+x': zx == self.columns if sx > 0 else zx == 1,
+                '-y': zy == 1, '+y': zy == self.rows}
+        need = robot_radius + wall_gap
         fx, fy = from_xy
-        candidates = [(cx + offset, cy), (cx - offset, cy), (cx, cy + offset), (cx, cy - offset)]
-        return min(candidates, key=lambda p: math.hypot(p[0] - fx, p[1] - fy))
+        best, best_key = (cx, cy), None
+        n = int(round(half / step))
+        for i in range(-n, n + 1):
+            for j in range(-n, n + 1):
+                dx, dy = i * step, j * step
+                if math.hypot(dx, dy) < clear:
+                    continue
+                margins = [half + dx - (need if wall['-x'] else 0), half - dx - (need if wall['+x'] else 0),
+                           half + dy - (need if wall['-y'] else 0), half - dy - (need if wall['+y'] else 0)]
+                m = min(margins)
+                if m < 0:
+                    continue
+                key = (round(m, 3), -math.hypot(cx + dx - fx, cy + dy - fy))
+                if best_key is None or key > best_key:
+                    best, best_key = (cx + dx, cy + dy), key
+        return best
 
 
 def mps_footprint(center, rotation_deg, size=0.20, margin=0.03, step=0.03):

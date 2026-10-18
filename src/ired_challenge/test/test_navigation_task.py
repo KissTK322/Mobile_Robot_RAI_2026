@@ -46,6 +46,20 @@ def test_goal_beside_mps_stays_in_zone_and_faces_robot():
     assert gx < 2.5                                       # the side the robot comes from
 
 
+def test_goal_beside_mps_is_deep_in_the_zone_and_off_the_walls():
+    # PC sim: a goal 10 cm from the zone edge ended 2 cm inside it and the refbox never
+    # counted the zone. Every zone the refbox can put a machine in, from 4 directions.
+    from ired_challenge.exploration import allowed_rotations
+    zones = [f'C_Z{x}{y}' for x in range(1, 6) for y in range(1, 6) if allowed_rotations(f'C_Z{x}{y}', 'C-BS')]
+    for z in zones:
+        cx, cy = F.center(z)
+        for fx, fy in ((cx + 2, cy), (cx - 2, cy), (cx, cy + 2), (cx, cy - 2)):
+            gx, gy = F.goal_in_zone(z, (fx, fy), blocked_zones=[z])
+            assert F.inside(z, gx, gy, margin=0.15), (z, gx, gy)
+            assert math.hypot(gx - cx, gy - cy) >= 0.39, (z, gx, gy)          # box in any rotation
+            assert 0.30 <= gx <= 4.70 and 0.30 <= gy <= 4.70, (z, gx, gy)  # robot radius + 8 cm off walls
+
+
 def test_mps_footprint_covers_the_box_only():
     pts = mps_footprint(F.center('C_Z23'), 45)
     cx, cy = F.center('C_Z23')
