@@ -506,7 +506,9 @@ def make_handler(manager):
             pass
 
         def end_headers(self):
-            self.send_header('Cache-Control', 'no-store')
+            # big static files (three.js, robot model) are cached a day; everything else is always fresh
+            big = self.path.startswith('/vendor/') or self.path.endswith('.stl')
+            self.send_header('Cache-Control', 'max-age=86400' if big else 'no-store')
             super().end_headers()
 
         def send_json(self, code, obj):
@@ -537,7 +539,9 @@ def make_handler(manager):
                 return self.send_json(401, {'error': why})
             if method == 'GET' and parts == ['config']:
                 c = manager.cfg
-                return self.send_json(200, {k: c[k] for k in ('rosbridge_port', 'video_port', 'foxglove_port')})
+                out = {k: c[k] for k in ('rosbridge_port', 'video_port', 'foxglove_port')}
+                out['field_origin'] = c.get('field_origin', [0.0, 0.0])
+                return self.send_json(200, out)
             if method == 'GET' and parts == ['status']:
                 return self.send_json(200, manager.status(topics=parse_qs(url.query).get('topics') == ['1']))
             if method == 'GET' and len(parts) == 3 and parts[0] == 'profiles' and parts[2] == 'log':

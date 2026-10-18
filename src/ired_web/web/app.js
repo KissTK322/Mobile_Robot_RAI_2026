@@ -10,7 +10,7 @@ const S = {
   status: null,
   ros: null,
   rosOk: false,
-  tab: 'status',
+  tab: 'map',
   estop: false,
   cmdPub: null,
   markerSub: null,
@@ -61,6 +61,7 @@ function connectRos() {
     S.rosOk = true;
     S.cmdPub = new ROSLIB.Topic({ ros, name: '/cmd_vel', messageType: 'geometry_msgs/msg/TwistStamped' });
     if (S.tab === 'camera') subscribeMarkers(true);
+    if (S.tab === 'map' && field.view) subscribeField();
     renderChips();
   });
   const lost = () => {
@@ -68,6 +69,7 @@ function connectRos() {
     S.rosOk = false;
     S.cmdPub = null;
     S.markerSub = null;
+    field.subs = [];
     renderChips();
     setTimeout(connectRos, 3000);
   };
@@ -483,6 +485,66 @@ $('#pid-restore').onclick = async () => {
 };
 $('#job-abort').onclick = () => api('tests/stop', { method: 'POST' }).catch(() => {});
 
+/* ---------- map tab (field view) ---------- */
+const field = { view: null, subs: [], loading: null };
+const quat = (yaw) => ({ x: 0, y: 0, z: Math.sin(yaw / 2), w: Math.cos(yaw / 2) });
+function stamp() { const t = Date.now(); return { sec: Math.floor(t / 1000), nanosec: (t % 1000) * 1e6 }; }
+
+async function openMap() {
+  if (!field.view) {
+    field.loading = field.loading || import('./field/field.js').then(({ createFieldView }) => {
+      field.view = createFieldView($('#field-root'), {
+        origin: (S.cfg && S.cfg.field_origin) || [0, 0],
+        meshUrl: 'field/ired_body_lite.stl',
+        onGoal: ({ x, y, yaw }) => {
+          if (S.estop) return 'Not sent: release STOP first.';
+          if (!S.rosOk) return 'Not sent: not connected to the robot.';
+          new ROSLIB.Topic({ ros: S.ros, name: '/goal_pose', messageType: 'geometry_msgs/msg/PoseStamped' }).publish({
+            header: { stamp: stamp(), frame_id: 'map' }, pose: { position: { x, y, z: 0 }, orientation: quat(yaw) } });
+          return null;
+        },
+        onInitialPose: ({ x, y, yaw }) => {
+          if (!S.rosOk) return 'Not sent: not connected to the robot.';
+          const cov = new Array(36).fill(0); cov[0] = 0.0625; cov[7] = 0.0625; cov[35] = 0.0685;   // 25 cm, 15 deg
+          new ROSLIB.Topic({ ros: S.ros, name: '/initialpose', messageType: 'geometry_msgs/msg/PoseWithCovarianceStamped' }).publish({
+            header: { stamp: stamp(), frame_id: 'map' }, pose: { pose: { position: { x, y, z: 0 }, orientation: quat(yaw) }, covariance: cov } });
+          return null;
+        },
+      });
+      field.view.setLive(true);
+    });
+    await field.loading;
+  }
+  field.view.show();
+  subscribeField();
+}
+
+function subscribeField() {
+  if (!S.ros || !S.rosOk || field.subs.length) return;
+  const v = field.view.ros;
+  // throttle_rate ms, CBOR for the big ones: keeps rosbridge (Python, on the Pi) light
+  const list = [
+    ['/amcl_pose', 'geometry_msgs/msg/PoseWithCovarianceStamped', v.amcl, {}],
+    ['/odometry/filtered', 'nav_msgs/msg/Odometry', v.odom, { throttle_rate: 100 }],
+    ['/scan_filtered', 'sensor_msgs/msg/LaserScan', v.scan, { throttle_rate: 200, compression: 'cbor' }],
+    ['/map', 'nav_msgs/msg/OccupancyGrid', v.map, { compression: 'cbor' }],
+    ['/plan', 'nav_msgs/msg/Path', v.path, { throttle_rate: 500 }],
+    ['/refbox/machine_info', 'refbox_msgs/msg/MachineInfoData', v.machines, { throttle_rate: 1000 }],
+    ['/challenge/navigation/state', 'std_msgs/msg/String', v.challenge, { throttle_rate: 500 }],
+  ];
+  field.subs = list.map(([name, type, cb, o]) => {
+    const t = new ROSLIB.Topic({ ros: S.ros, name, messageType: type, queue_length: 1, ...o });
+    t.subscribe(cb);
+    return t;
+  });
+}
+
+function closeMap() {
+  field.subs.forEach((t) => t.unsubscribe());
+  field.subs = [];
+  if (field.view) field.view.hide();
+}
+
 /* ---------- tabs ---------- */
 document.querySelectorAll('.tabs button').forEach((b) => {
   b.onclick = () => {
@@ -491,6 +553,7 @@ document.querySelectorAll('.tabs button').forEach((b) => {
     document.querySelectorAll('.page').forEach((p) => { p.hidden = p.id !== 'page-' + S.tab; });
     if (S.tab !== 'drive') stopDriving();
     subscribeMarkers(S.tab === 'camera');
+    if (S.tab === 'map') openMap(); else closeMap();
     if (S.status) render();
     if (S.tab === 'test') api('tests').then(renderTests).catch(() => {});
   };
@@ -507,6 +570,7 @@ async function start() {
   connectRos();
   poll();
   pollTests();
+  if (S.tab === 'map') openMap();
 }
 
 $('#host').textContent = host;

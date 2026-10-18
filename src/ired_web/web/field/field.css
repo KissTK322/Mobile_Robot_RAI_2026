@@ -1,0 +1,58 @@
+/* Field view (Map tab). Uses the app tokens (--text, --muted, --line, --panel) and
+   adds the competition colours. */
+.fv {
+  --fv-cyan: #0087a6;       /* RCLL team cyan: our robot, path */
+  --fv-magenta: #b8145f;    /* team magenta: goal */
+  --fv-wood: #b98a57;       /* MPS stations are wooden boxes */
+  --fv-amber: #c98800;      /* LiDAR returns */
+  --fv-floor: #e3e8eb;      /* concrete hall floor */
+  position: relative; height: calc(100dvh - 150px - env(safe-area-inset-bottom)); min-height: 360px;
+  margin: 0 -16px; overflow: hidden; background: var(--fv-floor);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .fv { --fv-cyan: #00b2d6; --fv-magenta: #d81b74; --fv-amber: #f3b53f; --fv-floor: #16232e; }
+}
+:root[data-theme="dark"] .fv { --fv-cyan: #00b2d6; --fv-magenta: #d81b74; --fv-amber: #f3b53f; --fv-floor: #16232e; }
+
+.fv-view { position: absolute; inset: 0; touch-action: none; }
+.fv-view canvas { display: block; }
+
+/* the HUD reads like the zone sign on a warehouse floor */
+.fv-hud { position: absolute; top: 10px; left: 12px; max-width: min(78vw, 340px); padding: 10px 14px 10px 16px;
+  background: color-mix(in srgb, var(--panel) 88%, transparent); border-left: 4px solid var(--fv-cyan);
+  border-radius: 4px 10px 10px 4px; backdrop-filter: blur(6px); pointer-events: none; }
+.fv-zone { font-size: 32px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -.5px; }
+.fv-zone.off { color: var(--muted); }
+.fv-pose { margin-top: 6px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.fv-task { margin-top: 6px; font-size: 14px; }
+.fv-task b { color: var(--fv-magenta); }
+.fv-source { margin-top: 4px; font-size: 12px; color: var(--muted); }
+.fv-source.live { color: var(--fv-cyan); }
+
+.fv-toolbar { position: absolute; left: 10px; right: 10px; bottom: 10px; display: flex; flex-wrap: wrap; gap: 6px;
+  align-items: center; justify-content: center; pointer-events: none; }
+.fv-toolbar > * { pointer-events: auto; }
+.fv-seg { display: flex; flex-wrap: wrap; justify-content: center; max-width: 100%;
+  background: color-mix(in srgb, var(--panel) 88%, transparent); border: 1px solid var(--line); border-radius: 12px;
+  padding: 3px; backdrop-filter: blur(6px); }
+.fv-seg button { border: 0; background: none; padding: 7px 10px; border-radius: 9px; color: var(--muted);
+  display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 13px; }
+.fv-seg button[aria-checked="true"] { background: var(--text); color: var(--panel); font-weight: 650; }
+.fv-seg button[aria-pressed="false"] { opacity: .45; text-decoration: line-through; }
+.fv-seg button[aria-pressed="true"] { color: var(--text); }
+.fv-sw { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.fv-sw.scan { background: var(--fv-amber); border-radius: 50%; }
+.fv-sw.path { background: var(--fv-cyan); height: 3px; width: 14px; }
+.fv-sw.box { background: var(--fv-wood); }
+.fv-sw.map { background: var(--text); opacity: .6; }
+.fv-sw.bot { background: var(--fv-cyan); border-radius: 50%; }
+.fv button:focus-visible { outline: 2px solid var(--fv-cyan); outline-offset: 2px; }
+
+.fv-sheet { position: absolute; left: 50%; bottom: 64px; transform: translateX(-50%); width: min(92%, 360px);
+  background: var(--panel); border: 1px solid var(--line); border-top: 4px solid var(--fv-magenta);
+  border-radius: 10px; padding: 14px 16px; z-index: 4; }
+.fv-sheet p { margin: 0 0 12px; font-size: 16px; }
+.fv-sheet .acts { display: flex; gap: 8px; }
+.fv-sheet .acts button { flex: 1; padding: 11px; border-radius: 9px; border: 1px solid var(--line); background: none;
+  font: inherit; font-weight: 650; color: var(--text); }
+.fv-sheet .acts .go { background: var(--fv-magenta); border-color: var(--fv-magenta); color: #fff; }

@@ -8,6 +8,8 @@
   <meta name="theme-color" content="#111418">
   <title>iRED Control</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="field/field.css">
+  <script type="importmap">{ "imports": { "three": "./vendor/three/three.module.min.js" } }</script>
 </head>
 <body>
   <header class="topbar">
@@ -22,8 +24,13 @@
   <div class="banner" id="estop-banner" hidden>E-STOP active: the robot is held at zero speed. Tap RELEASE to drive again.</div>
 
   <main>
+    <!-- MAP -->
+    <section class="page" id="page-map">
+      <div id="field-root"></div>
+    </section>
+
     <!-- STATUS -->
-    <section class="page" id="page-status">
+    <section class="page" id="page-status" hidden>
       <div class="grid" id="sys-cards"></div>
       <h2>Topics</h2>
       <table class="table" id="topic-table"><tbody></tbody></table>
@@ -135,7 +142,8 @@
   </main>
 
   <nav class="tabs">
-    <button data-tab="status" class="active">Status</button>
+    <button data-tab="map" class="active">Map</button>
+    <button data-tab="status">Status</button>
     <button data-tab="launch">Launch</button>
     <button data-tab="drive">Drive</button>
     <button data-tab="test">Test</button>

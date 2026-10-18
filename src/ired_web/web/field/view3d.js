@@ -2,8 +2,8 @@
  * Reads the same `model` object as the top view; ROS coordinates throughout
  * (the `world` group turns ROS z-up into three.js y-up). */
 import * as THREE from 'three';
-import { OrbitControls } from './vendor/OrbitControls.js';
-import { STLLoader } from './vendor/STLLoader.js';
+import { OrbitControls } from '../vendor/three/OrbitControls.js';
+import { STLLoader } from '../vendor/three/STLLoader.js';
 
 export function createView3D(host, model, colors) {
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });   // throws without WebGL
@@ -125,12 +125,14 @@ export function createView3D(host, model, colors) {
       scanGeo.attributes.position.needsUpdate = true;
       scan.visible = model.layers.scan;
       goal.visible = !!model.goal;
-      pathLine.visible = !!model.goal && model.layers.path;
-      if (model.goal) {
-        goal.position.set(model.goal[0], model.goal[1], 0.006);
-        pathLine.geometry.setFromPoints([new THREE.Vector3(model.robot.x, model.robot.y, 0.01), new THREE.Vector3(model.goal[0], model.goal[1], 0.01)]);
+      if (model.goal) goal.position.set(model.goal[0], model.goal[1], 0.006);
+      const route = model.path.length ? model.path : (model.goal ? [[model.robot.x, model.robot.y], model.goal] : []);
+      pathLine.visible = route.length > 1 && model.layers.path;
+      if (pathLine.visible) {
+        pathLine.geometry.setFromPoints(route.map(([x, y]) => new THREE.Vector3(x, y, 0.01)));
         pathLine.computeLineDistances();
       }
+      robot.visible = model.robotKnown;
       renderer.render(scene, cam);
     },
     dispose() {

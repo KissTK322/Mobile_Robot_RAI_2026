@@ -10,6 +10,10 @@ video_port: 8081       # camera MJPEG stream (web_video_server)
 foxglove_port: 8765    # Foxglove Studio:  ws://robotg5.local:8765
 log_dir: ~/.ros/ired_web
 
+# Map tab: map coordinates (x, y) of the field's outer C_Z11 corner. [0, 0] when the
+# map origin is that corner (same assumption as ired_challenge).
+field_origin: [0.0, 0.0]
+
 # Startable groups of nodes. {name} fields are filled from the settings above.
 # requires: started first if not running; conflicts: stopped first.
 profiles:
