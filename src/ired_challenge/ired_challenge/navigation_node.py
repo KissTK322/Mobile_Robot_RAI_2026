@@ -50,6 +50,11 @@ class Nav2Adapter:
     def cancel(self):
         if self.active:
             self.n.cancelTask()
+            # Wait for the old goal to end before a new one is sent: a late cancel
+            # otherwise reaches bt_navigator after the new goal and aborts that one.
+            deadline = time.monotonic() + 2.0
+            while not self.n.isTaskComplete() and time.monotonic() < deadline:
+                pass
         self.active = False
         self.last = 'failed'
 
