@@ -12,7 +12,13 @@ the robot pose, and gives it a `nav` object with:
     state()            'active' | 'succeeded' | 'failed'
     cancel()
     clear_costmaps()
-    escape()           optional: slide away from nearby obstacles (stuck in inflation)"""
+    escape()           optional: slide away from nearby obstacles (stuck in inflation)
+    go_via(points, yaw) optional: follow the given waypoints (grid route)
+
+With a `router` (ired_challenge.grid_planner.GridPlanner, route_mode 'grid') the zones
+are visited in the fastest order on the zone grid and each drive follows the grid
+route; from the second try of a zone on, Nav2 plans the drive itself. Without a router
+(route_mode 'nav2') the task behaves exactly as before: nearest-zone order, Nav2 plans."""
 from ired_challenge.field import visit_order
 
 WAIT_GAME, RED_ZONE, PICK, DRIVE, DWELL, DONE = 'WAIT_GAME', 'RED_ZONE', 'PICK', 'DRIVE', 'DWELL', 'DONE'
@@ -20,8 +26,8 @@ WAIT_GAME, RED_ZONE, PICK, DRIVE, DWELL, DONE = 'WAIT_GAME', 'RED_ZONE', 'PICK',
 
 class NavigationTask:
     def __init__(self, nav, field, log=print, red_zone='C_Z32', dwell=5.5, confirm_timeout=4.0,
-                 drive_timeout=40.0, retries=2, order='given', blocked_zones=(),
-                 stuck_time=8.0, stuck_dist=0.10):
+                 drive_timeout=40.0, retries=2, order='given', blocked_zones=(), router=None,
+                 grid_tries=1, stuck_time=8.0, stuck_dist=0.10):
         self.nav, self.field, self.log = nav, field, log
         self.red_zone = red_zone
         self.dwell = dwell                      # refbox needs 5 s inside the zone
@@ -40,6 +46,8 @@ class NavigationTask:
         self.visited = []
         self.deferred = []
         self.fast_fails = 0                     # drives that failed at once, in a row
+        self.router = router                    # GridPlanner, or None for plain Nav2 goals
+        self.grid_tries = grid_tries            # tries per zone on the grid route before Nav2 plans
         self.stuck_time, self.stuck_dist = stuck_time, stuck_dist
         self.progress = None                    # (time, xy) of the last real movement
 
@@ -50,9 +58,19 @@ class NavigationTask:
         self.state, self.t_state = state, now
 
     def _drive_to(self, zone, pose, now):
-        x, y = self.field.goal_in_zone(zone, (pose[0], pose[1]), self.blocked)
         self.target = zone
-        self.nav.go_to(x, y, pose[2])           # omni base: keep the heading, no turning
+        pts = None
+        if self.router is not None and self.tries < self.grid_tries and hasattr(self.nav, 'go_via'):
+            pts = self.router.path((pose[0], pose[1]), zone)
+        if pts:
+            self.nav.go_via(pts, pose[2])       # omni base: keep the heading, no turning
+        else:
+            if self.router is not None:
+                x, y = self.router.node[zone]
+                self.log(f'{zone}: Nav2 plans this drive' + ('' if self.tries else ' (no grid route)'))
+            else:
+                x, y = self.field.goal_in_zone(zone, (pose[0], pose[1]), self.blocked)
+            self.nav.go_to(x, y, pose[2])
         self.progress = (now, (pose[0], pose[1]))
         self._set(RED_ZONE if zone == self.red_zone and not self.red_done else DRIVE, now)
 
@@ -66,6 +84,13 @@ class NavigationTask:
             self.progress = (now, (pose[0], pose[1]))
             return False
         return now - t > self.stuck_time
+
+    def _order(self, pose):
+        fresh = [z for z in self.plan if z not in self.deferred]
+        late = [z for z in self.plan if z in self.deferred]
+        if self.router is not None:
+            return self.router.order((pose[0], pose[1]), fresh) + late
+        return visit_order(fresh, (pose[0], pose[1]), self.field, self.order) + late
 
     def info(self):
         return {'state': self.state, 'target': self.target, 'plan': self.plan,
@@ -125,7 +150,7 @@ class NavigationTask:
                 self._set(DONE, now)
                 self.log(f'All zones visited: {self.visited}')
                 return self.info()
-            self.plan = visit_order_keep_deferred(self.plan, self.deferred, (pose[0], pose[1]), self.field, self.order)
+            self.plan = self._order(pose)
             self.tries = 0
             self._drive_to(self.plan[0], pose, now)
             return self.info()

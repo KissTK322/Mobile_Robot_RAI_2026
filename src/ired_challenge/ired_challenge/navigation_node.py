@@ -16,7 +16,7 @@ from rclpy.executors import SingleThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from rclpy.time import Time
-from nav_msgs.msg import OccupancyGrid
+from nav_msgs.msg import OccupancyGrid, Path
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import LaserScan
 from refbox_msgs.msg import GamePlay, MachineInfoData, NavigationRoutesData
@@ -26,6 +26,7 @@ from tf_transformations import euler_from_quaternion, quaternion_from_euler
 
 from ired_challenge.escape import escape_direction, nearest
 from ired_challenge.field import Field, mps_footprint
+from ired_challenge.grid_planner import GridPlanner
 from ired_challenge.navigation_task import NavigationTask
 
 
@@ -46,6 +47,25 @@ class Nav2Adapter:
         q = quaternion_from_euler(0.0, 0.0, yaw)
         p.pose.orientation.x, p.pose.orientation.y, p.pose.orientation.z, p.pose.orientation.w = q
         self.active = self.n.goToPose(p)
+        self.last = 'active' if self.active else 'failed'
+
+    def go_via(self, points, yaw, spacing=0.05):
+        """Follow the grid route with Nav2's controller only (no Nav2 planning)."""
+        path = Path()
+        path.header.frame_id = 'map'
+        path.header.stamp = self.n.get_clock().now().to_msg()
+        q = quaternion_from_euler(0.0, 0.0, yaw)
+        dense = [points[0]]
+        for a, b in zip(points, points[1:]):
+            n = max(1, int(math.dist(a, b) / spacing))
+            dense += [(a[0] + (b[0] - a[0]) * i / n, a[1] + (b[1] - a[1]) * i / n) for i in range(1, n + 1)]
+        for x, y in dense:
+            p = PoseStamped()
+            p.header = path.header
+            p.pose.position.x, p.pose.position.y = float(x), float(y)
+            p.pose.orientation.x, p.pose.orientation.y, p.pose.orientation.z, p.pose.orientation.w = q
+            path.poses.append(p)
+        self.active = bool(self.n.followPath(path))
         self.last = 'active' if self.active else 'failed'
 
     def state(self):
@@ -83,6 +103,9 @@ class NavigationChallengeNode(Node):
             ('map_frame', 'map'), ('base_frame', 'base_footprint'),
             ('escape_speed', 0.06), ('escape_time', 3.0), ('escape_clearance', 0.30),
             ('scan_topic', '/scan_filtered'), ('cmd_vel_topic', '/cmd_vel'),
+            # 'grid': fastest order + routes on the zone grid (micromouse style), Nav2 follows them;
+            # 'nav2': the previous behaviour (nearest zone first, Nav2 plans every drive)
+            ('route_mode', 'grid'), ('grid_clearance', 0.30), ('grid_speed', 0.22), ('grid_tries', 1),
             ('stuck_time', 8.0), ('stuck_dist', 0.10),
         ])
         g = {x.name: x.value for x in p}
@@ -118,7 +141,15 @@ class NavigationChallengeNode(Node):
             Nav2Adapter(self.navigator, self.escape), self.field, log=self.get_logger().info,
             red_zone=g['red_zone'], dwell=g['dwell'], confirm_timeout=g['confirm_timeout'],
             drive_timeout=g['drive_timeout'], retries=g['retries'], order=g['order'],
-            stuck_time=g['stuck_time'], stuck_dist=g['stuck_dist'])
+            grid_tries=g['grid_tries'], stuck_time=g['stuck_time'], stuck_dist=g['stuck_dist'])
+        self.router = None
+        if g['route_mode'] == 'grid':
+            # The router goes live only once the map is in: without the walls it would
+            # plan straight through them. Until then (or in 'nav2' mode) Nav2 plans.
+            self.router = GridPlanner(self.field, clear=g['grid_clearance'], speed=g['grid_speed'])
+            self.create_subscription(OccupancyGrid, '/map', self.on_map,
+                                     QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
+                                                durability=DurabilityPolicy.TRANSIENT_LOCAL))
         self.get_logger().info(f"Navigation challenge ready (order={g['order']}, red zone {g['red_zone']})")
 
     def on_game(self, msg):
@@ -142,6 +173,18 @@ class NavigationChallengeNode(Node):
             boxes.append((cx, cy, float(m.rotation)))
         self.mps_zones = zones
         self.mps_boxes = boxes
+        if self.router is not None:
+            self.router.set_boxes([(m.zone, float(m.rotation)) for m in msg.machines])
+
+    def on_map(self, msg):
+        """Occupied cells of the static map (walls, START fence) for the grid router."""
+        w, res = msg.info.width, msg.info.resolution
+        ox, oy = msg.info.origin.position.x, msg.info.origin.position.y
+        pts = [(ox + (i % w + 0.5) * res, oy + (i // w + 0.5) * res) for i, v in enumerate(msg.data) if v >= 65]
+        self.router.set_static(pts)
+        if self.task.router is None:
+            self.task.router = self.router
+            self.get_logger().info(f'Grid router ready: {len(pts)} wall cells from the map')
 
     def obstacle_points(self, pose):
         """Nearby obstacle points in the robot frame: LiDAR (laser assumed at the robot

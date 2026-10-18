@@ -296,6 +296,45 @@ def test_robot_stuck_in_inflation_escapes_instead_of_retrying_forever():
     assert task.state == DONE and ref.remaining == []
 
 
+# ------------------------------------------------------------ grid route mode
+class FakeNavVia(FakeNav):
+    """FakeNav that can also follow waypoints (the grid route)."""
+
+    def go_via(self, points, yaw):
+        self.calls = getattr(self, 'calls', 0) + 1
+        self.via = list(points[1:])
+        self.goal, self._state = self.via.pop(0), 'active'
+        self.trace = getattr(self, 'trace', []) + [tuple(points[0])] + list(points[1:])
+
+    def step(self, dt):
+        super().step(dt)
+        if self._state == 'succeeded' and getattr(self, 'via', None):
+            self.goal, self._state = self.via.pop(0), 'active'
+
+
+def test_grid_mode_layout4_visits_all_zones_without_going_back_into_start():
+    from test_grid_planner import LAYOUT4, ROUTE4, planner
+    g = planner(LAYOUT4)
+    robot = {'xy': (4.5, 0.5)}                          # C_Z51, the real start
+    nav = FakeNavVia(robot)
+    ref = FakeRefbox(ROUTE4)
+    logs = []
+    task = NavigationTask(nav, F, log=logs.append, router=g, blocked_zones=[z for z, _ in LAYOUT4])
+    t, path = 0.0, []
+    while t < 600:
+        ref.step(t, robot['xy'])
+        info = task.update(t, True, ref.remaining, (*robot['xy'], 0.0))
+        if info['state'] == DONE:
+            break
+        nav.step(0.1)
+        path.append(robot['xy'])
+        t += 0.1
+    assert task.state == DONE and ref.remaining == []
+    left_start = next(i for i, p in enumerate(path) if p[1] > 1.2)
+    assert not any(2.0 < x < 5.0 and y < 0.9 for x, y in path[left_start:])   # never back into START
+    assert t < 300, f'{t:.0f} s'
+
+
 def test_no_progress_is_noticed_long_before_the_drive_timeout():
     class Stalled(FakeNav):
         def step(self, dt):
