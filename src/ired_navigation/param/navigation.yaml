@@ -190,8 +190,8 @@ local_costmap:
           obstacle_min_range: 0.0
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        inflation_radius: 0.30  
-        cost_scaling_factor: 12.0  
+        inflation_radius: 0.55   # robot 0.22 + room for the path to stay off walls
+        cost_scaling_factor: 4.0
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: true
@@ -254,8 +254,8 @@ global_costmap:
         transform_tolerance: 0.1
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        inflation_radius: 0.30  
-        cost_scaling_factor: 12.0  
+        inflation_radius: 0.55   # robot 0.22 + room for the path to stay off walls
+        cost_scaling_factor: 4.0
       always_send_full_costmap: true
 
 map_server:
