@@ -129,6 +129,10 @@ class GridPlanner:
             if z in left:
                 left.discard(z)
                 best[z] = (t, list(path))
+            if z in self.boxes and math.dist(self.node[z], start_xy) > 0.05:
+                continue                # a stop point beside a box is an end point (or where the robot
+                                        # already is), never a way through: that passes the box at the
+                                        # robot radius
             for n in self.links[z]:
                 c, nd = self._edge_cost(self.node[z], self.node[n], d)
                 heapq.heappush(pq, (t + c, n, round(nd, 3), path + (n,)))

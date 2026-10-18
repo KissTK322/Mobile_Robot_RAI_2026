@@ -125,3 +125,19 @@ def test_corner_cutting_keeps_the_clearance():
     pts = g.path(START, 'C_Z55')
     assert len(pts) <= 5                               # shortcut, not every zone centre
     assert_clear(g, pts)
+
+
+def test_routes_never_pass_through_a_box_zone_on_the_way():
+    # sim layout 2: the route to C_Z54 went through the stop point beside BS in C_Z53,
+    # 0.22 m from the box; DWB refused it and the zone cost 3 tries.
+    g = planner([('C_Z53', 90), ('C_Z45', 180), ('C_Z23', 135), ('C_Z25', 180)])
+    for start in ('C_Z52', 'C_Z42', 'C_Z33'):
+        for goal in g.zones:
+            if goal == start or in_start(F.center(goal)):
+                continue
+            pts = g.path(g.node[start], goal)
+            if pts is None:
+                continue
+            for p in pts[1:-1]:
+                z = F.zone_at(*p)
+                assert z not in g.boxes or p != g.node[z], (start, goal, pts)
