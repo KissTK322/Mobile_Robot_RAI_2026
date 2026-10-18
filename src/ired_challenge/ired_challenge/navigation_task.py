@@ -20,7 +20,8 @@ WAIT_GAME, RED_ZONE, PICK, DRIVE, DWELL, DONE = 'WAIT_GAME', 'RED_ZONE', 'PICK',
 
 class NavigationTask:
     def __init__(self, nav, field, log=print, red_zone='C_Z32', dwell=5.5, confirm_timeout=4.0,
-                 drive_timeout=40.0, retries=2, order='given', blocked_zones=()):
+                 drive_timeout=40.0, retries=2, order='given', blocked_zones=(),
+                 stuck_time=8.0, stuck_dist=0.10):
         self.nav, self.field, self.log = nav, field, log
         self.red_zone = red_zone
         self.dwell = dwell                      # refbox needs 5 s inside the zone
@@ -39,6 +40,8 @@ class NavigationTask:
         self.visited = []
         self.deferred = []
         self.fast_fails = 0                     # drives that failed at once, in a row
+        self.stuck_time, self.stuck_dist = stuck_time, stuck_dist
+        self.progress = None                    # (time, xy) of the last real movement
 
     # ---------------------------------------------------------------- helpers
     def _set(self, state, now):
@@ -50,7 +53,19 @@ class NavigationTask:
         x, y = self.field.goal_in_zone(zone, (pose[0], pose[1]), self.blocked)
         self.target = zone
         self.nav.go_to(x, y, pose[2])           # omni base: keep the heading, no turning
+        self.progress = (now, (pose[0], pose[1]))
         self._set(RED_ZONE if zone == self.red_zone and not self.red_done else DRIVE, now)
+
+    def _stuck(self, now, pose):
+        """True if the robot has not moved stuck_dist in the last stuck_time seconds."""
+        if self.progress is None:
+            self.progress = (now, (pose[0], pose[1]))
+            return False
+        t, xy = self.progress
+        if abs(pose[0] - xy[0]) + abs(pose[1] - xy[1]) >= self.stuck_dist:
+            self.progress = (now, (pose[0], pose[1]))
+            return False
+        return now - t > self.stuck_time
 
     def info(self):
         return {'state': self.state, 'target': self.target, 'plan': self.plan,
@@ -91,7 +106,9 @@ class NavigationTask:
                 self.log('Red zone passed')
                 self.target = None
                 self._set(PICK, now)
-            elif nav_state == 'failed' or now - self.t_state > self.drive_timeout:
+            elif nav_state == 'failed' or now - self.t_state > self.drive_timeout or self._stuck(now, pose):
+                if nav_state == 'active':
+                    self.log(f'Red zone: no progress at ({pose[0]:.2f}, {pose[1]:.2f})')
                 self.fast_fails = self.fast_fails + 1 if nav_state == 'failed' and now - self.t_state < 2.0 else 0
                 self._retry(pose, now)
             return self.info()
@@ -120,8 +137,10 @@ class NavigationTask:
             elif nav_state == 'succeeded' and self.field.inside(self.target, pose[0], pose[1], margin=0.05):
                 self.t_inside = now
                 self._set(DWELL, now)
-            elif nav_state in ('failed', 'succeeded') or now - self.t_state > self.drive_timeout:
-                why = 'timeout' if nav_state == 'active' else f'drive {nav_state}'
+            elif nav_state in ('failed', 'succeeded') or now - self.t_state > self.drive_timeout \
+                    or (nav_state == 'active' and self._stuck(now, pose)):
+                why = (('timeout' if now - self.t_state > self.drive_timeout else 'no progress')
+                       if nav_state == 'active' else f'drive {nav_state}')
                 self.fast_fails = self.fast_fails + 1 if nav_state == 'failed' and now - self.t_state < 2.0 else 0
                 self.log(f'{self.target}: {why} at ({pose[0]:.2f}, {pose[1]:.2f})')
                 self._retry(pose, now)

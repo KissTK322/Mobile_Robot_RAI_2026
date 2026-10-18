@@ -83,6 +83,7 @@ class NavigationChallengeNode(Node):
             ('map_frame', 'map'), ('base_frame', 'base_footprint'),
             ('escape_speed', 0.06), ('escape_time', 3.0), ('escape_clearance', 0.30),
             ('scan_topic', '/scan_filtered'), ('cmd_vel_topic', '/cmd_vel'),
+            ('stuck_time', 8.0), ('stuck_dist', 0.10),
         ])
         g = {x.name: x.value for x in p}
         self.cfg = g
@@ -116,7 +117,8 @@ class NavigationChallengeNode(Node):
         self.task = NavigationTask(
             Nav2Adapter(self.navigator, self.escape), self.field, log=self.get_logger().info,
             red_zone=g['red_zone'], dwell=g['dwell'], confirm_timeout=g['confirm_timeout'],
-            drive_timeout=g['drive_timeout'], retries=g['retries'], order=g['order'])
+            drive_timeout=g['drive_timeout'], retries=g['retries'], order=g['order'],
+            stuck_time=g['stuck_time'], stuck_dist=g['stuck_dist'])
         self.get_logger().info(f"Navigation challenge ready (order={g['order']}, red zone {g['red_zone']})")
 
     def on_game(self, msg):

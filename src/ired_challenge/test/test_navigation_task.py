@@ -294,3 +294,19 @@ def test_robot_stuck_in_inflation_escapes_instead_of_retrying_forever():
         t += 0.1
     assert nav.escapes == 1, logs
     assert task.state == DONE and ref.remaining == []
+
+
+def test_no_progress_is_noticed_long_before_the_drive_timeout():
+    class Stalled(FakeNav):
+        def step(self, dt):
+            pass                                        # Nav2 says active, robot does not move
+    robot = {'xy': (2.5, 1.5)}
+    nav = Stalled(robot)
+    logs = []
+    task = NavigationTask(nav, F, log=logs.append, drive_timeout=40.0, stuck_time=8.0)
+    task.red_done, task.state = True, 'PICK'
+    t = 0.0
+    while t < 12:
+        task.update(t, True, ['C_Z44'], (*robot['xy'], 0.0))
+        t += 0.1
+    assert any('no progress' in l for l in logs), logs
