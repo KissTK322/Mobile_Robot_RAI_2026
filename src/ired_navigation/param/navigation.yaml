@@ -145,6 +145,9 @@ controller_server:
       trans_stopped_velocity: 0.05
       short_circuit_trajectory_evaluation: true
       stateful: true
+      forward_prune_distance: 0.8   # DWB looks only 0.8 m along the path: with the full ~2 m a V-shaped
+                                    # route put its local goal across the V (behind a box), GoalDist and
+                                    # PathDist cancelled and the robot spun in place up to 71 s (PC sim)
       critics: ["RotateToGoal", "BaseObstacle", "GoalAlign", "PathAlign", "PathDist", "GoalDist", "Twirling"]   # Oscillation dropped: stop-and-go near goals
       BaseObstacle.scale: 0.02
       PathAlign.scale: 32.0
