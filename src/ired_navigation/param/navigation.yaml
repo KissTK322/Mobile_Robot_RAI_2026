@@ -170,7 +170,7 @@ local_costmap:
       width: 5    # 3 x 3 put DWB's local goal right behind an MPS box: equal way round
       height: 5   # both sides, so the robot crawled until a spin recovery (PC sim)
       resolution: 0.05
-      robot_radius: 0.22
+      robot_radius: 0.27   # body 0.216 m, the camera front reaches 0.26 m (2026-10-19 model)
       plugins: ["obstacle_layer", "mps_layer", "inflation_layer"]
       mps_layer:
         # MPS boxes from the ired_challenge mps_obstacles node: the LiDAR scans above
@@ -190,7 +190,7 @@ local_costmap:
           obstacle_min_range: 0.0
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        inflation_radius: 0.55   # robot 0.22 + room for the path to stay off walls
+        inflation_radius: 0.55   # robot 0.27 + room for the path to stay off walls
         cost_scaling_factor: 4.0
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
@@ -214,7 +214,7 @@ global_costmap:
       global_frame: map
       robot_base_frame: base_link
       transform_tolerance: 0.5
-      robot_radius: 0.22
+      robot_radius: 0.27   # body 0.216 m, the camera front reaches 0.26 m (2026-10-19 model)
       resolution: 0.05
       track_unknown_space: true
       plugins: ["static_layer", "obstacle_layer", "mps_layer", "inflation_layer"]
@@ -254,7 +254,7 @@ global_costmap:
         transform_tolerance: 0.1
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        inflation_radius: 0.55   # robot 0.22 + room for the path to stay off walls
+        inflation_radius: 0.55   # robot 0.27 + room for the path to stay off walls
         cost_scaling_factor: 4.0
       always_send_full_costmap: true
 
@@ -349,7 +349,7 @@ collision_monitor:
     polygons: ["PolygonStop", "PolygonSlow", "FootprintApproach"]
     PolygonStop:
       type: "circle"
-      radius: 0.24
+      radius: 0.29
       action_type: "stop"
       min_points: 4
       visualize: true
@@ -357,7 +357,7 @@ collision_monitor:
       enabled: true
     PolygonSlow:
       type: "circle"
-      radius: 0.35
+      radius: 0.40
       action_type: "slowdown"
       min_points: 4
       slowdown_ratio: 0.3
@@ -366,7 +366,7 @@ collision_monitor:
       enabled: true
     PolygonLimit:
       type: "circle"
-      radius: 0.40
+      radius: 0.45
       action_type: "limit"
       min_points: 4
       linear_limit: 0.4
