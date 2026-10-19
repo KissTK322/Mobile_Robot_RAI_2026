@@ -46,7 +46,8 @@ def all_active(node, clients):
     return waiting
 
 
-def stop(proc, grace=10.0):
+def stop(proc, grace=6.0):
+    # under the web manager's 10 s SIGINT grace, so Nav2 is never left behind
     if proc.poll() is not None:
         return
     try:
