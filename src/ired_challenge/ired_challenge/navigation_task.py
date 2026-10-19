@@ -53,6 +53,8 @@ class NavigationTask:
         self.stuck_time, self.stuck_dist = stuck_time, stuck_dist
         self.progress = None                    # (time, xy) of the last real movement
         self.goal_xy = None                     # stop point of the current drive
+        self.drive_from = None                  # where the current drive started
+        self.resends = 0                        # routes re-sent for this zone after a mid-way abort
 
     # ---------------------------------------------------------------- helpers
     def _set(self, state, now):
@@ -77,6 +79,7 @@ class NavigationTask:
             self.goal_xy = (x, y)
             self.nav.go_to(x, y, pose[2])
         self.progress = (now, (pose[0], pose[1]))
+        self.drive_from = (pose[0], pose[1])
         self._set(RED_ZONE if zone == self.red_zone and not self.red_done else DRIVE, now)
 
     def _short_of_goal(self, pose, reach=0.3):
@@ -84,6 +87,11 @@ class NavigationTask:
         goal = self.goal_xy
         return (goal is not None and math.dist(pose[:2], goal) <= reach
                 and self.field.inside(self.target, pose[0], pose[1], margin=0.1))
+
+    def _aborted_on_the_way(self, pose, now, moved=0.3, max_resends=3):
+        """The drive ran for a while and the robot really moved before Nav2 gave up."""
+        return (self.drive_from is not None and self.resends < max_resends and now - self.t_state >= 2.0
+                and math.dist(pose[:2], self.drive_from) >= moved)
 
     def _stuck(self, now, pose):
         """True if the robot has not moved stuck_dist in the last stuck_time seconds."""
@@ -162,7 +170,7 @@ class NavigationTask:
                 self.log(f'All zones visited: {self.visited}')
                 return self.info()
             self.plan = self._order(pose)
-            self.tries = 0
+            self.tries = self.resends = 0
             self._drive_to(self.plan[0], pose, now)
             return self.info()
 
@@ -179,6 +187,13 @@ class NavigationTask:
                 self.log(f'{self.target}: drive ended {math.dist(pose[:2], self.goal_xy):.2f} m short of the stop point, in the zone')
                 self.t_inside = now
                 self._set(DWELL, now)
+            elif nav_state == 'failed' and self._aborted_on_the_way(pose, now):
+                # DWB also aborts in the middle of a route ("Resulting plan has 0 poses")
+                # although the robot is driving fine: send the route again from here,
+                # which is not a failed try
+                self.resends += 1
+                self.log(f'{self.target}: drive aborted on the way at ({pose[0]:.2f}, {pose[1]:.2f}), sending the route again')
+                self._drive_to(self.target, pose, now)
             elif nav_state in ('failed', 'succeeded') or now - self.t_state > self.drive_timeout \
                     or (nav_state == 'active' and self._stuck(now, pose)):
                 why = (('timeout' if now - self.t_state > self.drive_timeout else 'no progress')

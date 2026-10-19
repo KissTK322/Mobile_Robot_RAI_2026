@@ -246,8 +246,44 @@ def test_drive_aborted_just_short_of_the_stop_point_counts_as_arrived():
 
 def test_drive_aborted_far_from_the_stop_point_is_still_retried():
     task, ref, logs = run_short_abort(0.6, zones=('C_Z11',))
-    first = next(i for i, l in enumerate(logs) if l.startswith('C_Z11:'))
-    assert logs[first].startswith('C_Z11: drive failed') and logs[first + 1] == 'C_Z11: try 2 of 3'
+    mine = [l for l in logs if l.startswith('C_Z11:')]
+    assert 'short of the stop point' not in mine[0]                 # not taken for an arrival
+    assert 'C_Z11: try 2 of 3' in mine                              # a drive that keeps failing is retried
+
+
+class FakeNavMidAbort(FakeNav):
+    """Aborts every drive once after `after` metres, like DWB's empty transformed plan."""
+
+    def __init__(self, robot, after=0.8):
+        super().__init__(robot)
+        self.after, self.start, self.aborted = after, None, set()
+
+    def go_to(self, x, y, yaw):
+        super().go_to(x, y, yaw)
+        self.start = self.robot['xy']
+
+    def step(self, dt):
+        super().step(dt)
+        if self._state == 'active' and self.goal not in self.aborted \
+                and math.dist(self.robot['xy'], self.start) >= self.after:
+            self.aborted.add(self.goal)
+            self._state = 'failed'
+
+
+def test_abort_on_the_way_resends_the_route_without_a_retry():
+    robot = {'xy': (4.5, 0.5)}
+    nav = FakeNavMidAbort(robot)
+    ref, logs = FakeRefbox(['C_Z11', 'C_Z14']), []
+    task = NavigationTask(nav, F, log=logs.append)
+    t = 0.0
+    while t < 300 and task.state != DONE:
+        ref.step(t, robot['xy'])
+        task.update(t, True, ref.remaining, (*robot['xy'], 0.0))
+        nav.step(0.1)
+        t += 0.1
+    assert ref.remaining == [] and task.state == DONE
+    assert any('aborted on the way' in l for l in logs)
+    assert not any(l.startswith(('C_Z11: try', 'C_Z14: try')) for l in logs)
 
 
 def test_unconfirmed_zone_is_retried_not_skipped_silently():
