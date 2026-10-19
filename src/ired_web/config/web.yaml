@@ -40,6 +40,8 @@ profiles:
   navigation:
     title: Navigation
     description: Nav2 with the saved map and AMCL
-    command: ros2 launch ired_navigation navigation.launch.xml
+    # through nav2_supervisor (proposal/nav2-omni): starts Nav2 again if it is not
+    # active within 60 s; the old command was ros2 launch ired_navigation navigation.launch.xml
+    command: ros2 run ired_navigation nav2_supervisor.py
     requires: [robot]
     conflicts: [mapping]
