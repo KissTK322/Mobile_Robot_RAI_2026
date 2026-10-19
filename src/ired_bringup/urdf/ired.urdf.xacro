@@ -2,12 +2,13 @@
 <robot name="IRED">
     <link name="base_footprint"/>
     <link name="base_link">
-        <!-- 3D model for display only (no collision). The STL is in mm with its
-             floor at z=-30.6 mm and the base centre at (-94.0, 4.8) mm, so this
-             origin puts that centre on base_link (0.11 m above the floor).
-             The robot front (camera and arm) is -X in the STL, hence the 180 deg yaw. -->
+        <!-- 3D model for display only (no collision), from Robocup_MobileRobot.stl of
+             2026-10-19 reduced to about 110k triangles. The STL is in mm with its floor
+             at z=-30.6 mm and the base centre at (-91.3, 1.9) mm, so this origin puts
+             that centre on base_link (0.11 m above the floor). The robot front (camera)
+             is -X in the STL, hence the 180 deg yaw. The SCARA arm is drawn unfolded. -->
         <visual>
-            <origin xyz="-0.094 0.005 -0.0794" rpy="0.0 0.0 3.14159"/>
+            <origin xyz="-0.0913 0.0019 -0.0794" rpy="0.0 0.0 3.14159"/>
             <geometry>
                 <mesh filename="package://ired_bringup/meshes/ired_body.stl" scale="0.001 0.001 0.001"/>
             </geometry>
@@ -28,19 +29,23 @@
         <origin xyz="0.0 0.0 0.11" rpy="0.0 0.0 0.0"/>
     </joint>
 
+    <!-- RPLidar A1 head on the robot centre, laser plane about 0.32 m above the floor
+         (head 0.31 to 0.33 m in the 2026-10-19 model), so 0.21 m above base_link.
+         Yaw unchanged, the scan orientation was already checked against odometry. -->
     <joint name="scan_joint" type="fixed">
         <parent link="base_link"/>
         <child link="base_scan"/>
-        <origin xyz="0.0 0.0 0.285" rpy="0.0 0.0 0.0"/>
+        <origin xyz="0.0 0.0 0.21" rpy="0.0 0.0 0.0"/>
     </joint>
 
-    <!-- Camera lens is 0.23 m in front of the centre (from the 3D model) and 0.29 m above
-         the floor (measured); base_link is 0.11 m above the floor.
+    <!-- C270 camera, level, lens about 0.25 m in front of the centre (front face 0.26 m)
+         and 0.133 m above the floor (2026-10-19 model), base_link is 0.11 m above the
+         floor. Low enough to see the ArUco markers (centre about 0.10 m) straight on.
          Keep colons out of comments here, bringup.launch.py parses this file as YAML. -->
     <joint name="aruco_camera_joint" type="fixed">
         <parent link="base_link"/>
         <child link="aruco_camera_link"/>
-        <origin xyz="0.23 0.0 0.18" rpy="0.0 0.0 0.0"/>
+        <origin xyz="0.25 0.0 0.023" rpy="0.0 0.0 0.0"/>
     </joint>
 
     <joint name="base_cartesian_joint" type="fixed">
