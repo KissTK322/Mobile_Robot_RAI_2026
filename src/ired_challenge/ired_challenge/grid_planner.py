@@ -11,6 +11,13 @@ Micromouse idea, adapted to an omni robot on the 5 x 5 m field:
 - the order of the zones is the exact fastest open tour (Held-Karp dynamic programming)
 - a route is shortened by cutting corners where the straight line keeps `clear`
 
+style='lanes' (route_mode lanes, the user's idea): routes run along the zone-centre
+lanes with right-angle turns; a diagonal link or a cut corner is only used where it
+keeps `diag_clear` (0.45 m) from walls and boxes, i.e. in open space. Narrow links
+(between clear and diag_clear) cost extra seconds and entering a zone that holds a
+box costs `box_risk_s`, so the order and the routes avoid the spots where drives
+had to be retried in the sim, unless that saves more time than the risk costs.
+
 Obstacles are given as points in the map frame: the occupied cells of the SLAM map
 (walls, START fence) and the MPS footprints from the refbox. Nothing about the field
 is hard-coded except the zone grid itself."""
@@ -37,8 +44,12 @@ def seg_point_dist(p, q, pts):
 
 
 class GridPlanner:
-    def __init__(self, field, clear=0.32, own_clear=0.27, speed=0.22, turn_s=0.6, box_margin=0.03):
+    def __init__(self, field, clear=0.32, own_clear=0.27, speed=0.22, turn_s=0.6, box_margin=0.03,
+                 style='grid', diag_clear=0.45, narrow_s=3.0, box_risk_s=4.0):
         self.field = field
+        self.style = style
+        self.diag_clear, self.narrow_s, self.box_risk_s = diag_clear, narrow_s, box_risk_s
+        self.pen = {}                   # (a, b) -> extra seconds for a narrow link (lanes)
         self.clear, self.own_clear = clear, own_clear
         self.speed, self.turn_s = speed, turn_s
         self.box_margin = box_margin
@@ -76,6 +87,19 @@ class GridPlanner:
                 return False
         return True
 
+    def _margin(self, p, q, own=()):
+        """Distance of segment p-q to the walls and to the boxes not in `own`."""
+        d = seg_point_dist(p, q, self.static)
+        for zone, pts in self.boxes.items():
+            if zone not in own:
+                d = min(d, seg_point_dist(p, q, pts))
+        return d
+
+    def _open(self, p, q, own=()):
+        """lanes: may this straight line be used although it is not along a lane?"""
+        axis = abs(p[0] - q[0]) < 1e-6 or abs(p[1] - q[1]) < 1e-6
+        return self.style != 'lanes' or axis or self._margin(p, q, own) >= self.diag_clear
+
     def _build(self):
         # Built into locals and swapped in at the end: the ROS node updates the map and
         # boxes from its executor thread while the task thread may be planning.
@@ -83,14 +107,22 @@ class GridPlanner:
         node = {z: (self.field.goal_in_zone(z, self.field.center(z), blocked) if z in self.boxes
                     else self.field.center(z)) for z in self.zones}
         links = {z: [] for z in self.zones}
+        pen = {}
         for i, a in enumerate(self.zones):
             _, ax, ay = self.field.parse(a)
             for b in self.zones[i + 1:]:
                 _, bx, by = self.field.parse(b)
                 if max(abs(ax - bx), abs(ay - by)) == 1 and self._clear_seg(node[a], node[b], own=(a, b)):
+                    diagonal = abs(ax - bx) == 1 and abs(ay - by) == 1
+                    if self.style == 'lanes':
+                        m = self._margin(node[a], node[b], own=(a, b))
+                        if diagonal and m < self.diag_clear:
+                            continue            # lanes: no diagonal close to a wall or a box
+                        span = max(self.diag_clear - self.clear, 1e-6)
+                        pen[(a, b)] = pen[(b, a)] = self.narrow_s * min(1.0, max(0.0, (self.diag_clear - m) / span))
                     links[a].append(b)
                     links[b].append(a)
-        self.node, self.links = node, links
+        self.node, self.links, self.pen = node, links, pen
         self.version += 1
 
     def _start_links(self, xy):
@@ -98,7 +130,8 @@ class GridPlanner:
         own = tuple(z for z in self.boxes if self.field.zone_at(*xy) == z)
         out = []
         for z in self.zones:
-            if math.dist(xy, self.node[z]) <= 1.5 and self._clear_seg(xy, self.node[z], own=own + (z,)):
+            if math.dist(xy, self.node[z]) <= 1.5 and self._clear_seg(xy, self.node[z], own=own + (z,)) \
+                    and self._open(xy, self.node[z], own=own + (z,)):
                 out.append(z)
         return out
 
@@ -118,6 +151,8 @@ class GridPlanner:
         pq = []
         for z in start_links:
             c, d = self._edge_cost(start_xy, self.node[z], None)
+            if self.style == 'lanes' and z in self.boxes and math.dist(start_xy, self.node[z]) > 0.05:
+                c += self.box_risk_s
             heapq.heappush(pq, (c, z, round(d, 3), (z,)))
         seen = {}
         left = set(targets)
@@ -135,6 +170,9 @@ class GridPlanner:
                                         # robot radius
             for n in self.links[z]:
                 c, nd = self._edge_cost(self.node[z], self.node[n], d)
+                c += self.pen.get((z, n), 0.0)
+                if self.style == 'lanes' and n in self.boxes:
+                    c += self.box_risk_s        # stopping beside a box: the riskiest drive
                 heapq.heappush(pq, (t + c, n, round(nd, 3), path + (n,)))
         return best
 
@@ -154,7 +192,8 @@ class GridPlanner:
         out, i = [pts[0]], 0
         while i < len(pts) - 1:
             j = len(pts) - 1
-            while j > i + 1 and not self._clear_seg(pts[i], pts[j], own=tuple(n for n in (names[i], names[j]) if n)):
+            while j > i + 1 and not (self._clear_seg(pts[i], pts[j], own=tuple(n for n in (names[i], names[j]) if n))
+                                     and self._open(pts[i], pts[j], own=tuple(n for n in (names[i], names[j]) if n))):
                 j -= 1
             out.append(pts[j])
             i = j

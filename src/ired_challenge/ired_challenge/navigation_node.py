@@ -156,9 +156,10 @@ class NavigationChallengeNode(Node):
             ('map_frame', 'map'), ('base_frame', 'base_footprint'),
             ('escape_speed', 0.06), ('escape_time', 3.0), ('escape_clearance', 0.30),
             ('scan_topic', '/scan_filtered'), ('cmd_vel_topic', '/cmd_vel'),
-            # 'grid': fastest order + routes on the zone grid (micromouse style), Nav2 follows them;
-            # 'nav2': the previous behaviour (nearest zone first, Nav2 plans every drive)
-            ('route_mode', 'grid'), ('grid_clearance', 0.32), ('grid_speed', 0.22), ('grid_tries', 1),
+            # 'lanes': zone-centre lanes, diagonals only in open space, risk-aware order (default);
+            # 'grid': fastest order + routes on the zone grid with diagonals, Nav2 follows them;
+            # 'nav2': the first behaviour (nearest zone first, Nav2 plans every drive)
+            ('route_mode', 'lanes'), ('grid_clearance', 0.32), ('grid_speed', 0.22), ('grid_tries', 1),
             ('stuck_time', 8.0), ('stuck_dist', 0.10),
         ])
         g = {x.name: x.value for x in p}
@@ -196,10 +197,12 @@ class NavigationChallengeNode(Node):
             drive_timeout=g['drive_timeout'], retries=g['retries'], order=g['order'],
             grid_tries=g['grid_tries'], stuck_time=g['stuck_time'], stuck_dist=g['stuck_dist'])
         self.router = None
-        if g['route_mode'] == 'grid':
+        if g['route_mode'] in ('grid', 'lanes'):
             # The router goes live only once the map is in: without the walls it would
             # plan straight through them. Until then (or in 'nav2' mode) Nav2 plans.
-            self.router = GridPlanner(self.field, clear=g['grid_clearance'], speed=g['grid_speed'])
+            lanes = g['route_mode'] == 'lanes'
+            self.router = GridPlanner(self.field, clear=g['grid_clearance'], speed=g['grid_speed'],
+                                      style='lanes' if lanes else 'grid', turn_s=1.2 if lanes else 0.6)
             self.create_subscription(OccupancyGrid, '/map', self.on_map,
                                      QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
                                                 durability=DurabilityPolicy.TRANSIENT_LOCAL))

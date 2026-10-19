@@ -141,3 +141,47 @@ def test_routes_never_pass_through_a_box_zone_on_the_way():
             for p in pts[1:-1]:
                 z = F.zone_at(*p)
                 assert z not in g.boxes or p != g.node[z], (start, goal, pts)
+
+
+# ------------------------------------------------------------ lanes style (route_mode lanes)
+def lanes(boxes=()):
+    g = GridPlanner(F, style='lanes', turn_s=1.2)
+    g.set_static(wall_points(BORDER + FENCE))
+    g.set_boxes(boxes)
+    return g
+
+
+def test_lanes_go_straight_and_only_cut_corners_in_open_space():
+    g = lanes(LAYOUT4)
+    cur = F.center('C_Z32')
+    for z in g.order(cur, ROUTE4):
+        pts = g.path(cur, z)
+        assert pts is not None, z
+        for a, b in zip(pts, pts[1:]):
+            axis = abs(a[0] - b[0]) < 1e-6 or abs(a[1] - b[1]) < 1e-6
+            into_box = b == pts[-1] and z in g.boxes          # the last bit to the stop point beside a box
+            own = {z, F.zone_at(*a)}
+            assert axis or into_box or g._margin(a, b, own=own) >= g.diag_clear - 1e-6, (z, a, b)
+        assert not any(in_start(p) for p in pts[1:]), (z, pts)
+        assert_clear(g, pts, own_zone=z if z in g.boxes else None)
+        cur = pts[-1]
+
+
+def test_lanes_order_is_exact_with_the_risk_costs():
+    g = lanes(LAYOUT4)
+    rng = random.Random(5)
+    free = [z for z in g.zones if not in_start(F.center(z))]
+    for _ in range(3):
+        zones = rng.sample(free, 5)
+        s = F.center('C_Z32')
+        best = min(g.tour_time(s, p) for p in itertools.permutations(zones))
+        assert g.tour_time(s, g.order(s, zones)) == pytest.approx(best, rel=1e-6)
+
+
+def test_lanes_avoid_a_narrow_gap_when_a_wider_way_exists():
+    # BS in C_Z53 against the right wall (sim layout 2, 7 retries): from C_Z52 to C_Z54 the
+    # lanes route must go round through C_Z43 / C_Z44, not past the box along the wall
+    g = lanes([('C_Z53', 90), ('C_Z45', 180), ('C_Z23', 135), ('C_Z25', 180)])
+    pts = g.path(F.center('C_Z52'), 'C_Z54')
+    assert pts is not None
+    assert all(p[0] <= 4.0 or F.zone_at(*p) in ('C_Z52', 'C_Z54') for p in pts), pts

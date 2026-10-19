@@ -15,10 +15,13 @@ navigation_challenge:
     rate: 10.0
     map_frame: "map"
     base_frame: "base_footprint"
-    # grid: fastest zone order and routes along the zone grid (micromouse style, walls
-    #       from /map, boxes from the refbox), Nav2 only follows them; Nav2 plans from
-    #       the second try of a zone on. nav2: the previous behaviour, kept as plan B.
-    route_mode: "grid"
+    # lanes: routes along the zone-centre lanes with right-angle turns, diagonals only
+    #        where 0.45 m from walls and boxes, narrow links and box zones cost extra time
+    #        so the order avoids risky drives (walls from /map, boxes from the refbox).
+    # grid:  fastest order on the zone grid with diagonals and corner cutting.
+    # nav2:  nearest zone first, Nav2 plans every drive (the first version).
+    # In grid and lanes Nav2 only follows the route; it plans from the second try of a zone.
+    route_mode: "lanes"
     grid_clearance: 0.32     # m from walls and boxes for every grid link (robot radius 0.27)
     grid_speed: 0.22         # m/s used for the time costs (not a speed limit)
     grid_tries: 1            # tries per zone on the grid route before Nav2 plans
