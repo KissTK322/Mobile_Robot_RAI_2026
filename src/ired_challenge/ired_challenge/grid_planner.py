@@ -133,6 +133,17 @@ class GridPlanner:
             if math.dist(xy, self.node[z]) <= 1.5 and self._clear_seg(xy, self.node[z], own=own + (z,)) \
                     and self._open(xy, self.node[z], own=own + (z,)):
                 out.append(z)
+        if out:
+            return out
+        # The robot can stop a few mm inside the clearance (seen in the sim: 0.316 m from the
+        # START fence after the red zone, no link at all). Then allow any straight line that
+        # never gets closer to an obstacle than the robot already is.
+        d0 = self._margin(xy, xy, own=own) - 0.01
+        if d0 < self.own_clear:
+            return []
+        for z in self.zones:
+            if math.dist(xy, self.node[z]) <= 1.5 and self._margin(xy, self.node[z], own=own + (z,)) >= d0:
+                out.append(z)
         return out
 
     # ------------------------------------------------------------ search

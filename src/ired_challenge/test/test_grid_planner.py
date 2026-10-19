@@ -185,3 +185,16 @@ def test_lanes_avoid_a_narrow_gap_when_a_wider_way_exists():
     pts = g.path(F.center('C_Z52'), 'C_Z54')
     assert pts is not None
     assert all(p[0] <= 4.0 or F.zone_at(*p) in ('C_Z52', 'C_Z54') for p in pts), pts
+
+
+def test_route_from_a_pose_just_inside_the_wall_clearance():
+    # sim pocket layout: after the red zone the robot stood 0.316 m from the START fence
+    # (clearance 0.32), had no start link and fell back to Nav2, which got stuck 3 times
+    for make in (planner, lanes):
+        g = make([('C_Z25', 180), ('C_Z22', 45), ('C_Z43', 0), ('C_Z45', 180)])
+        start = (2.609, 1.133)
+        assert seg_point_dist(start, start, g.static) < g.clear
+        pts = g.path(start, 'C_Z12')
+        assert pts is not None
+        for p, q in zip(pts, pts[1:]):
+            assert seg_point_dist(p, q, g.static) >= seg_point_dist(start, start, g.static) - 0.011
