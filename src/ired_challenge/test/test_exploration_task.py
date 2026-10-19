@@ -81,9 +81,9 @@ def camera(robot, boxes, rng, cam_x=0.23, hfov=math.radians(45.6)):
     return out
 
 
-def run(boxes, seed=1, max_time=600):
+def run(boxes, seed=1, max_time=600, robot_cls=None):
     rng = random.Random(seed)
-    robot = FakeRobot((4.5, 0.5), math.pi)                       # C_Z51 facing -x
+    robot = (robot_cls or FakeRobot)((4.5, 0.5), math.pi)                       # C_Z51 facing -x
     est = MachineEstimator(F, refbox_rules=False)
     reports = []
     task = ExplorationTask(robot, F, est, lambda m, x, y, r: reports.append((m, F.zone_at(x, y), r)) or True,
@@ -135,3 +135,31 @@ def test_sweep_and_border_route():
         route = border_route(a, b)
         for p, q in zip(route, route[1:]):
             assert p[0] == q[0] or p[1] == q[1]                   # along a border line
+
+
+class AbortingRobot(FakeRobot):
+    """Like DWB with a short look-ahead: every other drive is aborted 0.4 m into it."""
+
+    def go_via(self, points, yaw):
+        super().go_via(points, yaw)
+        self.drives = getattr(self, 'drives', 0) + 1
+        self.start, self.done_once = (self.x, self.y), self.drives % 2 == 0
+
+    def step(self, dt):
+        super().step(dt)
+        if self._state == 'active' and self.goal_yaw is None and not self.done_once \
+                and math.hypot(self.x - self.start[0], self.y - self.start[1]) >= 0.4:
+            self.done_once = True
+            self.via, self._state = [], 'failed'
+
+
+def test_drives_aborted_on_the_way_are_resent_not_skipped():
+    boxes = [('BS', 'C_Z33', 90), ('CS1', 'C_Z24', 0)]
+    task, reports, robot, t = run(boxes, robot_cls=AbortingRobot)
+    assert task.state == DONE and len(reports) == 2, reports
+    for x, y in robot.trace:
+        if y < 1.0 or F.zone_at(x, y) == 'C_Z32':
+            continue
+        for a in range(1, 6):
+            for b in range(2, 6):
+                assert math.hypot(x - (a - 0.5), y - (b - 0.5)) >= 0.45, (x, y)

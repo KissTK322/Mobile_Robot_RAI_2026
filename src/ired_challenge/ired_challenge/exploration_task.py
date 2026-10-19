@@ -62,6 +62,7 @@ class ExplorationTask:
         self.reported = {}                                   # machine -> report dict
         self.queue, self.looks = [], []
         self.here = None
+        self.route, self.resends = [], 0         # current border route, re-sends after aborts
         self.red_done = False
         self.heading = None                                  # last commanded heading
         self.t_still = None                                  # when the current turn finished
@@ -107,6 +108,7 @@ class ExplorationTask:
             start = self.here if self.here is not None else (pose[0], pose[1])
             pts = border_route(start, p) if self.here is not None else [(pose[0], pose[1]), p]
             self.target = p
+            self.route, self.resends = list(pts), 0
             self.nav.go_via(pts, pose[2])
             self._set(MOVE, now)
             return
@@ -163,6 +165,14 @@ class ExplorationTask:
                 self.here = self.target
                 self.looks = self._looks_at(self.target)
                 self._look(now)
+            elif st == 'failed' and self.resends < 3 and now - self.t_state > 1.0:
+                # DWB aborts some drives on the way ("Resulting plan has 0 poses"): send the
+                # rest of the same border route from here instead of skipping the point
+                self.resends += 1
+                rest = self.route[min(range(len(self.route)), key=lambda i: math.dist(self.route[i], pose[:2])) + 1:]
+                self.log(f'Drive to {self.target} aborted at ({pose[0]:.2f}, {pose[1]:.2f}), sending the rest of the route')
+                self.nav.go_via([(pose[0], pose[1])] + (rest or [self.target]), pose[2])
+                self.t_state = now
             elif st == 'failed' or now - self.t_state > self.move_timeout:
                 self.log(f'Could not reach {self.target}, skipping it')
                 self.here = None
