@@ -37,7 +37,7 @@ def seg_point_dist(p, q, pts):
 
 
 class GridPlanner:
-    def __init__(self, field, clear=0.30, own_clear=0.22, speed=0.22, turn_s=0.6, box_margin=0.03):
+    def __init__(self, field, clear=0.32, own_clear=0.27, speed=0.22, turn_s=0.6, box_margin=0.03):
         self.field = field
         self.clear, self.own_clear = clear, own_clear
         self.speed, self.turn_s = speed, turn_s

@@ -158,7 +158,7 @@ class NavigationChallengeNode(Node):
             ('scan_topic', '/scan_filtered'), ('cmd_vel_topic', '/cmd_vel'),
             # 'grid': fastest order + routes on the zone grid (micromouse style), Nav2 follows them;
             # 'nav2': the previous behaviour (nearest zone first, Nav2 plans every drive)
-            ('route_mode', 'grid'), ('grid_clearance', 0.30), ('grid_speed', 0.22), ('grid_tries', 1),
+            ('route_mode', 'grid'), ('grid_clearance', 0.32), ('grid_speed', 0.22), ('grid_tries', 1),
             ('stuck_time', 8.0), ('stuck_dist', 0.10),
         ])
         g = {x.name: x.value for x in p}

@@ -51,8 +51,8 @@ class Field:
         half = self.size / 2 - margin
         return abs(px - cx) <= half and abs(py - cy) <= half
 
-    def goal_in_zone(self, zone, from_xy, blocked_zones=(), robot_radius=0.22, mps_half_diag=0.15,
-                     wall_gap=0.08, step=0.02):
+    def goal_in_zone(self, zone, from_xy, blocked_zones=(), robot_radius=0.27, mps_half_diag=0.184,
+                     wall_gap=0.08, step=0.01):
         """Point to drive to inside `zone`.
 
         Normally the zone centre. If an MPS station stands in the zone (its centre
@@ -68,7 +68,9 @@ class Field:
         if zone not in blocked_zones:
             return cx, cy
         half = self.size / 2
-        clear = robot_radius + mps_half_diag + 0.03
+        # mps_half_diag: half diagonal of the box plus the 3 cm footprint margin used in the
+        # costmap (0.13 * sqrt 2), so the stop point clears the box in any rotation
+        clear = robot_radius + mps_half_diag + 0.01
         _, zx, zy = self.parse(zone)
         sx = -1 if zone.startswith('M') else 1       # magenta zones are mirrored in x
         # wall on each side: robot centre must keep robot_radius + wall_gap from it

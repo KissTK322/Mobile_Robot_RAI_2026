@@ -19,7 +19,7 @@ navigation_challenge:
     #       from /map, boxes from the refbox), Nav2 only follows them; Nav2 plans from
     #       the second try of a zone on. nav2: the previous behaviour, kept as plan B.
     route_mode: "grid"
-    grid_clearance: 0.30     # m from walls and boxes for every grid link
+    grid_clearance: 0.32     # m from walls and boxes for every grid link (robot radius 0.27)
     grid_speed: 0.22         # m/s used for the time costs (not a speed limit)
     grid_tries: 1            # tries per zone on the grid route before Nav2 plans
     stuck_time: 8.0          # s without moving stuck_dist -> retry, long before drive_timeout
