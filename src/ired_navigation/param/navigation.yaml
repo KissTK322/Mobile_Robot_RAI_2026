@@ -145,9 +145,11 @@ controller_server:
       trans_stopped_velocity: 0.05
       short_circuit_trajectory_evaluation: true
       stateful: true
-      forward_prune_distance: 0.8   # DWB looks only 0.8 m along the path: with the full ~2 m a V-shaped
-                                    # route put its local goal across the V (behind a box), GoalDist and
-                                    # PathDist cancelled and the robot spun in place up to 71 s (PC sim)
+      prune_distance: 1.0   # DWB keeps 1 m of passed path and looks 1 m ahead (default 2 m). With 2 m a
+                            # V-shaped route put its local goal across the V (behind a box), GoalDist and
+                            # PathDist cancelled and the robot spun in place (PC sim, up to 71 s).
+                            # forward_prune_distance 0.8 also fixed that but aborted drives on the way
+                            # ("Resulting plan has 0 poses", exploration 259 s); this one: 0 aborts.
       critics: ["RotateToGoal", "BaseObstacle", "GoalAlign", "PathAlign", "PathDist", "GoalDist", "Twirling"]   # Oscillation dropped: stop-and-go near goals
       BaseObstacle.scale: 0.02
       PathAlign.scale: 32.0
