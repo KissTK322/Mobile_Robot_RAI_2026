@@ -12,4 +12,9 @@ install(
   DESTINATION share/${PROJECT_NAME}
 )
 
+install(
+  PROGRAMS scripts/nav2_supervisor.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 ament_package()
