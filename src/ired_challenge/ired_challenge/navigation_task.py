@@ -19,6 +19,8 @@ With a `router` (ired_challenge.grid_planner.GridPlanner, route_mode 'grid') the
 are visited in the fastest order on the zone grid and each drive follows the grid
 route; from the second try of a zone on, Nav2 plans the drive itself. Without a router
 (route_mode 'nav2') the task behaves exactly as before: nearest-zone order, Nav2 plans."""
+import math
+
 from ired_challenge.field import visit_order
 
 WAIT_GAME, RED_ZONE, PICK, DRIVE, DWELL, DONE = 'WAIT_GAME', 'RED_ZONE', 'PICK', 'DRIVE', 'DWELL', 'DONE'
@@ -50,6 +52,7 @@ class NavigationTask:
         self.grid_tries = grid_tries            # tries per zone on the grid route before Nav2 plans
         self.stuck_time, self.stuck_dist = stuck_time, stuck_dist
         self.progress = None                    # (time, xy) of the last real movement
+        self.goal_xy = None                     # stop point of the current drive
 
     # ---------------------------------------------------------------- helpers
     def _set(self, state, now):
@@ -63,6 +66,7 @@ class NavigationTask:
         if self.router is not None and self.tries < self.grid_tries and hasattr(self.nav, 'go_via'):
             pts = self.router.path((pose[0], pose[1]), zone)
         if pts:
+            self.goal_xy = tuple(pts[-1])
             self.nav.go_via(pts, pose[2])       # omni base: keep the heading, no turning
         else:
             if self.router is not None:
@@ -70,9 +74,16 @@ class NavigationTask:
                 self.log(f'{zone}: Nav2 plans this drive' + ('' if self.tries else ' (no grid route)'))
             else:
                 x, y = self.field.goal_in_zone(zone, (pose[0], pose[1]), self.blocked)
+            self.goal_xy = (x, y)
             self.nav.go_to(x, y, pose[2])
         self.progress = (now, (pose[0], pose[1]))
         self._set(RED_ZONE if zone == self.red_zone and not self.red_done else DRIVE, now)
+
+    def _short_of_goal(self, pose, reach=0.3):
+        """Within `reach` of the stop point and well inside the target zone."""
+        goal = self.goal_xy
+        return (goal is not None and math.dist(pose[:2], goal) <= reach
+                and self.field.inside(self.target, pose[0], pose[1], margin=0.1))
 
     def _stuck(self, now, pose):
         """True if the robot has not moved stuck_dist in the last stuck_time seconds."""
@@ -160,6 +171,12 @@ class NavigationTask:
                 self.nav.cancel()
                 self._visited(now)
             elif nav_state == 'succeeded' and self.field.inside(self.target, pose[0], pose[1], margin=0.05):
+                self.t_inside = now
+                self._set(DWELL, now)
+            elif nav_state == 'failed' and self._short_of_goal(pose):
+                # DWB with a short look-ahead aborts the last few cm of a path ("Resulting
+                # plan has 0 poses"); already in the zone, so that is arrival, not a failure
+                self.log(f'{self.target}: drive ended {math.dist(pose[:2], self.goal_xy):.2f} m short of the stop point, in the zone')
                 self.t_inside = now
                 self._set(DWELL, now)
             elif nav_state in ('failed', 'succeeded') or now - self.t_state > self.drive_timeout \

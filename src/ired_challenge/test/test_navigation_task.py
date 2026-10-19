@@ -210,6 +210,46 @@ def test_mps_zone_is_visited_beside_the_box():
     assert ref.remaining == []
 
 
+class FakeNavShortAbort(FakeNav):
+    """Like DWB with a short look-ahead: the drive aborts `short` metres before the goal."""
+
+    def __init__(self, robot, short):
+        super().__init__(robot)
+        self.short = short
+
+    def step(self, dt):
+        super().step(dt)
+        if self._state == 'active' and math.dist(self.robot['xy'], self.goal) <= self.short:
+            self._state = 'failed'
+
+
+def run_short_abort(short, zones=('C_Z11', 'C_Z44')):
+    robot = {'xy': (4.5, 0.5)}
+    nav = FakeNavShortAbort(robot, short)
+    ref, logs = FakeRefbox(list(zones)), []
+    task = NavigationTask(nav, F, log=logs.append)
+    t = 0.0
+    while t < 300 and task.state != DONE:
+        ref.step(t, robot['xy'])
+        task.update(t, True, ref.remaining, (*robot['xy'], 0.0))
+        nav.step(0.1)
+        t += 0.1
+    return task, ref, logs
+
+
+def test_drive_aborted_just_short_of_the_stop_point_counts_as_arrived():
+    task, ref, logs = run_short_abort(0.15)
+    assert ref.remaining == [] and task.state == DONE
+    assert not any('try 2' in l for l in logs)
+    assert any('short of the stop point' in l for l in logs)
+
+
+def test_drive_aborted_far_from_the_stop_point_is_still_retried():
+    task, ref, logs = run_short_abort(0.6, zones=('C_Z11',))
+    first = next(i for i, l in enumerate(logs) if l.startswith('C_Z11:'))
+    assert logs[first].startswith('C_Z11: drive failed') and logs[first + 1] == 'C_Z11: try 2 of 3'
+
+
 def test_unconfirmed_zone_is_retried_not_skipped_silently():
     task, ref, nav, logs, _ = simulate(['C_Z11'], confirm=False, max_time=60)
     assert task.state != DONE
