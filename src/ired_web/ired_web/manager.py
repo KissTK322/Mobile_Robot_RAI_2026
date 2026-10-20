@@ -30,6 +30,7 @@ from rclpy.serialization import deserialize_message
 from sensor_msgs.msg import Imu, LaserScan
 from std_msgs.msg import String
 from ired_msgs.msg import MotorData
+from ired_web.mapping import MapStore, MapWatch
 
 SHARE = get_package_share_directory('ired_web')
 ROS_SETUP = 'source /opt/ros/jazzy/setup.bash && source ~/ros_environment.bash'
@@ -60,7 +61,9 @@ class Profile:
     def __init__(self, name, spec, cfg):
         self.name = name
         self.spec = spec
-        self.command = spec['command'].format(**cfg)
+        self.cfg = cfg
+        self.extra = lambda: {'map_name': 'map'}   # filled in when the profile starts (the Map page's choice)
+        self.command = spec['command'].format(**cfg, **self.extra())
         self.log_path = os.path.join(cfg['log_dir'], f'{name}.log')
         self.proc = None
         self.state = 'stopped'
@@ -72,6 +75,7 @@ class Profile:
         with self.lock:
             if self.proc and self.proc.poll() is None:
                 return
+            self.command = self.spec['command'].format(**self.cfg, **self.extra())
             log = open(self.log_path, 'w')
             log.write(f'$ {self.command}\n')
             log.flush()
@@ -249,6 +253,7 @@ class WebNode(Node):
         self._estop = False
         self.estop_timer_handle = self.create_timer(0.05, self.estop_timer)
         self.estop_timer_handle.cancel()     # only runs while STOP is latched
+        self.mapwatch = MapWatch(self)       # Map page: /map and the robot pose, only while shown
 
     def watch(self, topics):
         """Subscribe to exactly `topics` (a subset of WATCHED_TOPICS).
@@ -379,8 +384,15 @@ class Manager:
         self.profiles = {n: Profile(n, spec, cfg) for n, spec in cfg['profiles'].items()}
         self.failures = {}       # ip -> (count, locked_until)
         self.job = None
-        self.last_viewed = {'status': 0.0, 'gains': 0.0}
+        self.last_viewed = {'status': 0.0, 'gains': 0.0, 'map': 0.0}
         self.results_path = os.path.join(cfg['log_dir'], 'results.jsonl')
+        try:
+            share_maps = os.path.join(get_package_share_directory('ired_navigation'), 'maps')
+        except Exception:                    # package not built on this machine
+            share_maps = None
+        self.maps = MapStore(cfg.get('maps_dir', '~/ired_ws/src/ired_navigation/maps'), share_maps, cfg['log_dir'])
+        for p in self.profiles.values():
+            p.extra = lambda: {'map_name': self.maps.active()}
 
     def check_pin(self, ip, pin):
         count, locked = self.failures.get(ip, (0, 0.0))
@@ -476,6 +488,15 @@ class Manager:
         else:
             topics = set()
         self.node.watch(topics)
+        self.node.mapwatch.watch(now - self.last_viewed['map'] < 5.0)
+
+    def map_info(self):
+        self.viewed('map')
+        info = self.node.mapwatch.info()
+        info['maps'] = self.maps.list()
+        info['active'] = self.maps.active()
+        info['mapping'] = self.profiles['mapping'].info()['state'] if 'mapping' in self.profiles else 'none'
+        return info
 
     def tests_info(self):
         self.viewed('gains')
@@ -558,6 +579,30 @@ def make_handler(manager):
             if method == 'POST' and parts == ['estop']:
                 manager.set_estop(bool(self.body_json().get('active', True)))
                 return self.send_json(200, {'estop': manager.node.estop})
+            if method == 'GET' and parts == ['map', 'info']:
+                return self.send_json(200, manager.map_info())
+            if method == 'GET' and parts == ['map', 'png']:
+                manager.viewed('map')
+                png = manager.node.mapwatch.png_bytes()
+                if png is None:
+                    return self.send_json(404, {'error': 'no map yet'})
+                self.send_response(200)
+                self.send_header('Content-Type', 'image/png')
+                self.send_header('Content-Length', str(len(png)))
+                self.end_headers()
+                self.wfile.write(png)
+                return
+            if method == 'POST' and parts[:1] == ['map'] and parts[1:] in (['save'], ['select']):
+                name = str(self.body_json().get('name', '')).strip()
+                try:
+                    if parts[1] == 'save':
+                        out = manager.maps.save(manager.node.mapwatch.map, name)
+                    else:
+                        manager.maps.select(name)
+                        out = {'active': name}
+                except (ValueError, OSError) as e:
+                    return self.send_json(400, {'error': str(e)})
+                return self.send_json(200, out)
             if method == 'GET' and parts == ['tests']:
                 return self.send_json(200, manager.tests_info())
             if method == 'POST' and parts == ['tests', 'run']:

@@ -19,6 +19,9 @@
   <exec_depend>foxglove_bridge</exec_depend>
   <exec_depend>python3-psutil</exec_depend>
   <exec_depend>python3-yaml</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-pil</exec_depend>
+  <exec_depend>tf2_msgs</exec_depend>
 
   <export>
     <build_type>ament_python</build_type>

@@ -159,3 +159,15 @@ dialog h2 { margin-top: 0; }
 .mini th:first-child, .mini td:first-child { text-align: left; }
 a.btn { text-decoration: none; display: inline-block; }
 .good { color: var(--ok); } .meh { color: var(--warn); } .badv { color: var(--bad); }
+
+/* Map page */
+.map-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.map-wrap { position: relative; background: #cdcdcd; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+#map-canvas { display: block; width: 100%; touch-action: none; }
+.map-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; padding: 24px; margin: 0; background: var(--panel); }
+.pads-small .pad { width: 130px; height: 130px; }
+.save-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+.save-row input { flex: 1 1 160px; min-height: 44px; border: 1px solid var(--line); border-radius: 9px; padding: 0 10px; background: var(--panel); color: var(--text); font: inherit; }
+.map-item { display: flex; align-items: center; gap: 10px; min-height: 48px; border-bottom: 1px solid var(--line); }
+.map-item .name { font-weight: 600; flex: 1; }
+.map-item .badge { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 6px; background: var(--accent); color: #fff; }

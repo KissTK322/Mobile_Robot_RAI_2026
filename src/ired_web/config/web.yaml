@@ -9,6 +9,7 @@ rosbridge_port: 9090   # ROS <-> browser websocket
 video_port: 8081       # camera MJPEG stream (web_video_server)
 foxglove_port: 8765    # Foxglove Studio:  ws://robotg5.local:8765
 log_dir: ~/.ros/ired_web
+maps_dir: ~/ired_ws/src/ired_navigation/maps   # Map page saves maps here
 
 # Startable groups of nodes. {name} fields are filled from the settings above.
 # requires: started first if not running; conflicts: stopped first.
@@ -36,6 +37,7 @@ profiles:
   navigation:
     title: Navigation
     description: Nav2 with the saved map and AMCL
-    command: ros2 launch ired_navigation navigation.launch.xml
+    # {map_name}: the map chosen on the Map page (maps_dir), default map
+    command: ros2 launch ired_navigation navigation.launch.xml map_name:={map_name}.yaml
     requires: [robot]
     conflicts: [mapping]

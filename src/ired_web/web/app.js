@@ -259,6 +259,8 @@ function makePad(el, state, xOnly) {
 }
 makePad($('#pad-move'), drive.move, false);
 makePad($('#pad-turn'), drive.turn, true);
+makePad($('#pad-move-m'), drive.move, false);   // same pads on the Map page
+makePad($('#pad-turn-m'), drive.turn, true);
 
 const linMax = () => parseFloat($('#lin-max').value);
 const angMax = () => parseFloat($('#ang-max').value);
@@ -303,7 +305,7 @@ function stopDriving() {
 document.addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT') return;
   if (e.code === 'Space') { e.preventDefault(); if (!S.estop) $('#estop').click(); return; }
-  if (S.tab !== 'drive' || S.estop) return;
+  if ((S.tab !== 'drive' && S.tab !== 'map') || S.estop) return;
   const key = e.key.toLowerCase();
   if ('wasdqe'.includes(key) && key.length === 1) { drive.keys.add(key); startDriving(); }
 });
@@ -483,13 +485,123 @@ $('#pid-restore').onclick = async () => {
 };
 $('#job-abort').onclick = () => api('tests/stop', { method: 'POST' }).catch(() => {});
 
+/* ---------- map (live SLAM map, save, choose the Navigation map) ---------- */
+const MAP = { info: null, img: null, version: -1, busy: false };
+
+function mapStamp() {
+  const d = new Date(), p = (n) => String(n).padStart(2, '0');
+  return `field-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`;
+}
+
+async function fetchMapImage() {
+  const res = await fetch('/api/map/png', { headers: { 'X-Pin': S.pin } });
+  if (!res.ok) return null;
+  return createImageBitmap(await res.blob());
+}
+
+async function pollMap(now) {
+  if (S.tab !== 'map') return;
+  if (MAP.busy && !now) return;
+  MAP.busy = true;
+  try {
+    const info = await api('map/info');
+    MAP.info = info;
+    if (info.have && info.version !== MAP.version) {
+      const img = await fetchMapImage();
+      if (img) { MAP.img = img; MAP.version = info.version; }
+    }
+    renderMap();
+  } catch (e) { /* PIN dialog or offline: try again next round */ }
+  MAP.busy = false;
+}
+setInterval(() => pollMap(false), 1000);
+
+function renderMap() {
+  const info = MAP.info;
+  if (!info) return;
+  const st = info.mapping;
+  $('#map-state').textContent = st === 'running' ? '· mapping' : st === 'starting' ? '· starting…' : '';
+  $('#map-start').disabled = st === 'running' || st === 'starting' || S.estop;
+  $('#map-stop').disabled = !(st === 'running' || st === 'starting');
+  if (!$('#map-name').value) $('#map-name').value = mapStamp();
+  $('#map-empty').hidden = !!(info.have && MAP.img);
+
+  const cv = $('#map-canvas'), wrap = $('#map-wrap');
+  const w = wrap.clientWidth, h = Math.min(Math.round(window.innerHeight * 0.55), w);
+  const dpr = window.devicePixelRatio || 1;
+  if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
+    cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); cv.style.height = h + 'px';
+  }
+  const g = cv.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.fillStyle = '#cdcdcd'; g.fillRect(0, 0, w, h);
+  if (info.have && MAP.img) {
+    const k = Math.min(w / info.width, h / info.height);
+    const ox = (w - info.width * k) / 2, oy = (h - info.height * k) / 2;
+    g.imageSmoothingEnabled = false;
+    g.drawImage(MAP.img, ox, oy, info.width * k, info.height * k);
+    const p = info.pose;
+    if (p) {
+      const px = ox + (p[0] - info.origin[0]) / info.resolution * k;
+      const py = oy + (info.height - (p[1] - info.origin[1]) / info.resolution) * k;
+      const r = Math.max(0.22 / info.resolution * k, 5);
+      g.fillStyle = 'rgba(31,111,235,.85)'; g.beginPath(); g.arc(px, py, r, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = '#f2b33d'; g.lineWidth = 3; g.beginPath(); g.moveTo(px, py);
+      g.lineTo(px + Math.cos(p[2]) * r * 1.6, py - Math.sin(p[2]) * r * 1.6); g.stroke();
+    }
+  }
+
+  const list = $('#map-list');
+  list.replaceChildren(...(info.maps || []).map((m) => {
+    const row = document.createElement('div'); row.className = 'map-item';
+    const name = document.createElement('span'); name.className = 'name'; name.textContent = m.name;
+    const when = document.createElement('span'); when.className = 'muted small';
+    when.textContent = new Date(m.time * 1000).toLocaleString();
+    row.append(name, when);
+    if (m.active) {
+      const b = document.createElement('span'); b.className = 'badge'; b.textContent = 'in use'; row.append(b);
+    } else {
+      const b = document.createElement('button'); b.className = 'btn'; b.textContent = 'Use for Navigation';
+      b.onclick = () => api('map/select', { method: 'POST', body: { name: m.name } })
+        .then(() => { $('#map-msg').textContent = `Navigation will use ${m.name}.`; pollMap(true); })
+        .catch(() => { $('#map-msg').textContent = 'Could not choose that map.'; });
+      row.append(b);
+    }
+    return row;
+  }));
+}
+
+$('#map-start').onclick = () => {
+  $('#map-msg').textContent = 'Starting mapping (Navigation is stopped if it runs)…';
+  api('profiles/mapping/start', { method: 'POST' }).then(() => pollMap(true)).catch(() => {});
+};
+$('#map-stop').onclick = () => {
+  if (!confirm('Stop mapping? A map that is not saved is lost.')) return;
+  api('profiles/mapping/stop', { method: 'POST' }).then(() => pollMap(true)).catch(() => {});
+};
+$('#map-save').onclick = async () => {
+  const name = $('#map-name').value.trim();
+  $('#map-msg').textContent = 'Saving…';
+  try {
+    const res = await fetch('/api/map/save', { method: 'POST', headers: { 'X-Pin': S.pin, 'Content-Type': 'application/json' },
+                                              body: JSON.stringify({ name }) });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) { $('#map-msg').textContent = j.error || 'Could not save the map.'; return; }
+    $('#map-msg').textContent = `Saved ${j.name} (${j.width_m} x ${j.height_m} m). Tap "Use for Navigation" to drive with it.`;
+    $('#map-name').value = '';
+    pollMap(true);
+  } catch (e) { $('#map-msg').textContent = 'Could not reach the robot.'; }
+};
+window.addEventListener('resize', () => { if (S.tab === 'map') renderMap(); });
+
 /* ---------- tabs ---------- */
 document.querySelectorAll('.tabs button').forEach((b) => {
   b.onclick = () => {
     S.tab = b.dataset.tab;
     document.querySelectorAll('.tabs button').forEach((x) => x.classList.toggle('active', x === b));
     document.querySelectorAll('.page').forEach((p) => { p.hidden = p.id !== 'page-' + S.tab; });
-    if (S.tab !== 'drive') stopDriving();
+    if (S.tab !== 'drive' && S.tab !== 'map') stopDriving();
+    if (S.tab === 'map') pollMap(true);
     subscribeMarkers(S.tab === 'camera');
     if (S.status) render();
     if (S.tab === 'test') api('tests').then(renderTests).catch(() => {});

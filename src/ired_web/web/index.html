@@ -63,6 +63,41 @@
       <p class="muted small">Hold a pad to drive; let go and the robot stops. Keyboard: W/S forward/back, A/D sideways, Q/E turn, Space = STOP.</p>
     </section>
 
+    <!-- MAP -->
+    <section class="page" id="page-map" hidden>
+      <div class="row-between">
+        <h2>Map <span class="muted small" id="map-state"></span></h2>
+        <div class="map-actions">
+          <button class="btn primary" id="map-start">Start mapping</button>
+          <button class="btn" id="map-stop">Stop mapping</button>
+        </div>
+      </div>
+      <div class="map-wrap" id="map-wrap">
+        <canvas id="map-canvas" aria-label="Live map with the robot"></canvas>
+        <p class="map-empty muted small" id="map-empty">No map yet. Take the boxes off the field, put the robot at C_Z51 facing -x, then Start mapping and drive slowly.</p>
+      </div>
+      <div class="pads pads-small">
+        <div class="pad-wrap">
+          <div class="pad" id="pad-move-m"><div class="knob"></div></div>
+          <div class="pad-label">Move</div>
+        </div>
+        <div class="pad-wrap">
+          <div class="pad pad-x" id="pad-turn-m"><div class="knob"></div></div>
+          <div class="pad-label">Turn</div>
+        </div>
+      </div>
+      <p class="muted small">Speed limits are the ones on the Drive page. Drive slowly (0.10-0.15 m/s) and turn gently, 2-3 rounds.</p>
+      <div class="save-row">
+        <label for="map-name" class="muted small">Name</label>
+        <input id="map-name" maxlength="40" autocomplete="off" spellcheck="false">
+        <button class="btn primary" id="map-save">Save map</button>
+      </div>
+      <p class="small" id="map-msg"></p>
+      <h2>Saved maps</h2>
+      <div id="map-list"></div>
+      <p class="muted small">Navigation uses the map marked "in use" the next time it starts.</p>
+    </section>
+
     <!-- TEST -->
     <section class="page" id="page-test" hidden>
       <div class="job" id="test-job" hidden>
@@ -138,6 +173,7 @@
     <button data-tab="status" class="active">Status</button>
     <button data-tab="launch">Launch</button>
     <button data-tab="drive">Drive</button>
+    <button data-tab="map">Map</button>
     <button data-tab="test">Test</button>
     <button data-tab="camera">Camera</button>
   </nav>
