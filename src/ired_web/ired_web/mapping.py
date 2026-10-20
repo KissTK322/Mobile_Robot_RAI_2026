@@ -21,7 +21,7 @@ import numpy as np
 import yaml
 from PIL import Image
 from nav_msgs.msg import OccupancyGrid, Odometry
-from rclpy.qos import QoSProfile, ReliabilityPolicy
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from rclpy.serialization import deserialize_message
 from tf2_msgs.msg import TFMessage
 
@@ -90,8 +90,13 @@ class MapWatch:
         if on and not self.subs:
             n = self.node
             self.subs = [
+                # Cartographer publishes /map volatile every second, Nav2's map_server once,
+                # latched (transient local): one subscription for each kind
                 n.create_subscription(OccupancyGrid, '/map', self.on_map,
                                       QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE)),
+                n.create_subscription(OccupancyGrid, '/map', self.on_map,
+                                      QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
+                                                 durability=DurabilityPolicy.TRANSIENT_LOCAL)),
                 n.create_subscription(TFMessage, '/tf', self.on_tf, 100, raw=True),
                 n.create_subscription(Odometry, '/odometry/filtered', self.on_odom, 10, raw=True),
             ]
@@ -105,6 +110,8 @@ class MapWatch:
 
     def on_map(self, msg):
         with self.lock:
+            if self.map is not None and msg.header.stamp == self.map.header.stamp and msg.info == self.map.info:
+                return                    # the same map from the second subscription
             self.map = msg
             self.version += 1
 

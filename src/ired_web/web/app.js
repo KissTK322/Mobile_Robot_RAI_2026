@@ -60,6 +60,8 @@ function connectRos() {
   ros.on('connection', () => {
     S.rosOk = true;
     S.cmdPub = new ROSLIB.Topic({ ros, name: '/cmd_vel', messageType: 'geometry_msgs/msg/TwistStamped' });
+    S.goalPub = new ROSLIB.Topic({ ros, name: '/goal_pose', messageType: 'geometry_msgs/msg/PoseStamped' });
+    S.initPub = new ROSLIB.Topic({ ros, name: '/initialpose', messageType: 'geometry_msgs/msg/PoseWithCovarianceStamped' });
     if (S.tab === 'camera') subscribeMarkers(true);
     renderChips();
   });
@@ -486,7 +488,11 @@ $('#pid-restore').onclick = async () => {
 $('#job-abort').onclick = () => api('tests/stop', { method: 'POST' }).catch(() => {});
 
 /* ---------- map (live SLAM map, save, choose the Navigation map) ---------- */
-const MAP = { info: null, img: null, version: -1, busy: false };
+const MAP = { info: null, img: null, version: -1, busy: false, view: null, goal: null, sent: null };
+// stamp 0 = "latest": the phone's clock is not the robot's
+const quat = (yaw) => ({ x: 0, y: 0, z: Math.sin(yaw / 2), w: Math.cos(yaw / 2) });
+const ZERO_STAMP = { sec: 0, nanosec: 0 };
+const START_POSE = [4.5, 0.5, Math.PI];   // C_Z51 centre facing -x (field frame map)
 
 function mapStamp() {
   const d = new Date(), p = (n) => String(n).padStart(2, '0');
@@ -527,7 +533,8 @@ function renderMap() {
   $('#map-empty').hidden = !!(info.have && MAP.img);
 
   const cv = $('#map-canvas'), wrap = $('#map-wrap');
-  const w = wrap.clientWidth, h = Math.min(Math.round(window.innerHeight * 0.55), w);
+  const landscape = window.innerWidth > window.innerHeight;
+  const w = wrap.clientWidth, h = Math.min(Math.round(window.innerHeight * (landscape ? 0.66 : 0.55)), w);
   const dpr = window.devicePixelRatio || 1;
   if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
     cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); cv.style.height = h + 'px';
@@ -538,6 +545,8 @@ function renderMap() {
   if (info.have && MAP.img) {
     const k = Math.min(w / info.width, h / info.height);
     const ox = (w - info.width * k) / 2, oy = (h - info.height * k) / 2;
+    MAP.view = { k, ox, oy };
+    const toPx = (x, y) => [ox + (x - info.origin[0]) / info.resolution * k, oy + (info.height - (y - info.origin[1]) / info.resolution) * k];
     g.imageSmoothingEnabled = false;
     g.drawImage(MAP.img, ox, oy, info.width * k, info.height * k);
     const p = info.pose;
@@ -549,7 +558,14 @@ function renderMap() {
       g.strokeStyle = '#f2b33d'; g.lineWidth = 3; g.beginPath(); g.moveTo(px, py);
       g.lineTo(px + Math.cos(p[2]) * r * 1.6, py - Math.sin(p[2]) * r * 1.6); g.stroke();
     }
+    for (const [goal, color] of [[MAP.sent, '#2e7d4f'], [MAP.goal, '#e05a00']]) {
+      if (!goal) continue;
+      const [gx, gy] = toPx(goal[0], goal[1]);
+      g.strokeStyle = color; g.lineWidth = 3;
+      g.beginPath(); g.arc(gx, gy, 9, 0, Math.PI * 2); g.moveTo(gx - 14, gy); g.lineTo(gx + 14, gy); g.moveTo(gx, gy - 14); g.lineTo(gx, gy + 14); g.stroke();
+    }
   }
+  $('#map-canvas').classList.toggle('can-goal', profileState('navigation') === 'running');
 
   const list = $('#map-list');
   list.replaceChildren(...(info.maps || []).map((m) => {
@@ -571,7 +587,58 @@ function renderMap() {
   }));
 }
 
+function navMsg(t) { $('#nav-msg').textContent = t; }
+
+$('#map-canvas').addEventListener('click', (e) => {
+  const info = MAP.info, v = MAP.view;
+  if (!info || !info.have || !v) return;
+  if (profileState('navigation') !== 'running') { navMsg('Start Navigation on the Launch page first.'); return; }
+  const r = e.currentTarget.getBoundingClientRect();
+  const x = info.origin[0] + ((e.clientX - r.left - v.ox) / v.k) * info.resolution;
+  const y = info.origin[1] + (info.height - (e.clientY - r.top - v.oy) / v.k) * info.resolution;
+  MAP.goal = [x, y];
+  $('#nav-go').hidden = false;
+  navMsg(`Goal (${x.toFixed(2)}, ${y.toFixed(2)}) m - press Go there.`);
+  renderMap();
+});
+
+$('#nav-go').onclick = () => {
+  if (!MAP.goal || !S.goalPub) { navMsg('Not connected to ROS.'); return; }
+  if (S.estop) { navMsg('Release STOP first.'); return; }
+  const p = MAP.info && MAP.info.pose;
+  const [x, y] = MAP.goal;
+  const yaw = p ? Math.atan2(y - p[1], x - p[0]) : 0;   // face the way it drives
+  S.goalPub.publish({ header: { stamp: ZERO_STAMP, frame_id: 'map' },
+                      pose: { position: { x, y, z: 0 }, orientation: quat(yaw) } });
+  MAP.sent = MAP.goal; MAP.goal = null; $('#nav-go').hidden = true;
+  navMsg(`Driving to (${x.toFixed(2)}, ${y.toFixed(2)}). STOP or Cancel goal to halt.`);
+  renderMap();
+};
+
+$('#nav-cancel').onclick = () => {
+  const p = MAP.info && MAP.info.pose;
+  MAP.goal = null; $('#nav-go').hidden = true;
+  if (!S.goalPub || !p) { navMsg('Robot position unknown: use STOP.'); renderMap(); return; }
+  // a goal where the robot already is ends the current one
+  S.goalPub.publish({ header: { stamp: ZERO_STAMP, frame_id: 'map' },
+                      pose: { position: { x: p[0], y: p[1], z: 0 }, orientation: quat(p[2]) } });
+  MAP.sent = null;
+  navMsg('Goal cancelled.');
+  renderMap();
+};
+
+$('#nav-start-pose').onclick = () => {
+  if (!S.initPub) { navMsg('Not connected to ROS.'); return; }
+  if (!confirm('Is the robot at the centre of C_Z51, facing C_Z41?')) return;
+  const [x, y, yaw] = START_POSE;
+  const cov = new Array(36).fill(0); cov[0] = 0.04; cov[7] = 0.04; cov[35] = 0.03;
+  S.initPub.publish({ header: { stamp: ZERO_STAMP, frame_id: 'map' },
+                      pose: { pose: { position: { x, y, z: 0 }, orientation: quat(yaw) }, covariance: cov } });
+  navMsg('Start pose sent to AMCL.');
+};
+
 $('#map-start').onclick = () => {
+  if (profileState('navigation') === 'running' && !confirm('Mapping stops Navigation. Start mapping?')) return;
   $('#map-msg').textContent = 'Starting mapping (Navigation is stopped if it runs)…';
   api('profiles/mapping/start', { method: 'POST' }).then(() => pollMap(true)).catch(() => {});
 };

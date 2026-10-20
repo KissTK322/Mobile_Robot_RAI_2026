@@ -180,3 +180,11 @@ a.btn { text-decoration: none; display: inline-block; }
 .map-item { display: flex; align-items: center; gap: 10px; min-height: 48px; border-bottom: 1px solid var(--line); }
 .map-item .name { font-weight: 600; flex: 1; }
 .map-item .badge { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 6px; background: var(--accent); color: #fff; }
+.nav-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+#map-canvas.can-goal { cursor: crosshair; }
+@media (orientation: landscape) and (max-height: 520px) {
+  /* phone on its side: map left, controls right */
+  #page-map { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); column-gap: 14px; align-items: start; }
+  #page-map > * { grid-column: 2; }
+  #page-map > .map-wrap { grid-column: 1; grid-row: 1 / span 12; }
+}

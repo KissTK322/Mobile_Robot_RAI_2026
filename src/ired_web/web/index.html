@@ -76,6 +76,12 @@
         <canvas id="map-canvas" aria-label="Live map with the robot"></canvas>
         <p class="map-empty muted small" id="map-empty">No map yet. Take the boxes off the field, put the robot at C_Z51 facing -x, then Start mapping and drive slowly.</p>
       </div>
+      <div class="nav-row">
+        <button class="btn" id="nav-start-pose">Robot is at C_Z51 (start)</button>
+        <button class="btn primary" id="nav-go" hidden>Go there</button>
+        <button class="btn danger" id="nav-cancel">Cancel goal</button>
+      </div>
+      <p class="small" id="nav-msg">Navigation: tap the map to choose a goal.</p>
       <div class="pads pads-small">
         <div class="pad-wrap">
           <div class="pad" id="pad-move-m"><div class="knob"></div></div>
