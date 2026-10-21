@@ -41,6 +41,12 @@ profiles:
     command: ros2 launch ired_navigation navigation.launch.xml map_name:={map_name}.yaml
     requires: [robot]
     conflicts: [mapping, navigation_omni]
+  record:
+    title: Record (rosbag)
+    description: Records driving data to ~/bags while Navigation runs (for finding why the robot stalls)
+    # small topics only (no images, no particle cloud, local costmap at 2 Hz): about 0.2-0.5 MB/s
+    command: bash -c 'mkdir -p $HOME/bags && exec ros2 bag record -o $HOME/bags/nav-$(date +%Y%m%d-%H%M%S) /cmd_vel /cmd_vel_nav /cmd_vel_smoothed /collision_monitor_state /odometry/filtered /odom /ired/motor/data /scan_filtered /amcl_pose /goal_pose /initialpose /plan /local_plan /local_costmap/costmap /behavior_tree_log /tf /tf_static'
+    requires: [robot]
   navigation_omni:
     title: Navigation (omni)
     description: Nav2 tuned for the omni base (sideways, soft start/stop, real robot size)
