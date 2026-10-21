@@ -520,6 +520,7 @@ async function pollMap(now) {
   try {
     const info = await api('map/info');
     MAP.info = info;
+    if (info.active !== ZONES.map && ($('#zones-use').checked || $('#zones-box').open)) loadZones();
     if (info.have && info.version !== MAP.version) {
       const img = await fetchMapImage();
       if (img) { MAP.img = img; MAP.version = info.version; }
@@ -638,6 +639,59 @@ function fieldZone(x, y) {
   return { name: `C_Z${a}${b}`, centre: [a - 0.5, b - 0.5] };
 }
 
+// measured zone centres of the map Navigation uses (optional, see mapping.py)
+const ZONES = { map: null, zones: {} };
+
+function renderZones() {
+  const names = Object.keys(ZONES.zones);
+  const offs = names.map((k) => {
+    const [x, y] = ZONES.zones[k], a = +k[3], b = +k[4];
+    return `${k} ${Math.round(Math.hypot(x - (a - 0.5), y - (b - 0.5)) * 100)} cm`;
+  });
+  $('#zones-msg').textContent = ZONES.map
+    ? `${ZONES.map}: ${names.length}/25 measured` + (names.length ? ` (off the grid: ${offs.join(', ')})` : '')
+    : '';
+}
+
+async function loadZones() {
+  try { Object.assign(ZONES, await api('map/zones')); renderZones(); } catch (e) { /* offline */ }
+}
+$('#zones-box').addEventListener('toggle', (e) => { if (e.target.open) loadZones(); });
+
+function zoneHere() {
+  const p = MAP.info && MAP.info.pose;
+  if (!p) { $('#zones-msg').textContent = 'Robot position unknown (start Navigation, set the start pose).'; return null; }
+  const z = fieldZone(p[0], p[1]);
+  if (!z) { $('#zones-msg').textContent = 'The robot is outside the field.'; return null; }
+  return { zone: z.name, xy: [p[0], p[1]] };
+}
+
+$('#zones-save').onclick = async () => {
+  const h = zoneHere();
+  if (!h) return;
+  if (!confirm(`Is the robot on the real centre of ${h.zone}? Save (${h.xy[0].toFixed(2)}, ${h.xy[1].toFixed(2)})?`)) return;
+  try { Object.assign(ZONES, await api('map/zones', { method: 'POST', body: h })); renderZones(); } catch (e) {
+    $('#zones-msg').textContent = 'Not saved: ' + String(e.message || e).replace(/^http \d+: /, '');
+  }
+};
+
+$('#zones-clear').onclick = async () => {
+  const h = zoneHere();
+  if (!h || !ZONES.zones[h.zone]) { if (h) $('#zones-msg').textContent = `${h.zone} has no measured centre.`; return; }
+  if (!confirm(`Clear the measured centre of ${h.zone}?`)) return;
+  try { Object.assign(ZONES, await api('map/zones', { method: 'POST', body: { zone: h.zone, clear: true } })); renderZones(); } catch (e) {
+    $('#zones-msg').textContent = 'Not cleared.';
+  }
+};
+
+try {
+  $('#zones-use').checked = localStorage.getItem('ired_zones_use') === '1';
+} catch (e) { /* private mode */ }
+$('#zones-use').onchange = (e) => {
+  if (e.target.checked) loadZones();
+  try { localStorage.setItem('ired_zones_use', e.target.checked ? '1' : '0'); } catch (err) { /* private mode */ }
+};
+
 try {
   $('#nav-snap').checked = localStorage.getItem('ired_nav_snap') !== '0';
 } catch (e) { /* private mode */ }
@@ -655,8 +709,9 @@ $('#map-canvas').addEventListener('click', (e) => {
   let label = '';
   const zone = fieldZone(x, y);
   if ($('#nav-snap').checked && zone) {
-    [x, y] = zone.centre;
-    label = `${zone.name} `;
+    const measured = $('#zones-use').checked && ZONES.zones[zone.name];
+    [x, y] = measured || zone.centre;
+    label = `${zone.name}${measured ? ' (measured)' : ''} `;
   }
   MAP.goal = [x, y];
   $('#nav-go').hidden = false;

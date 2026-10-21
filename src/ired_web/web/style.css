@@ -192,3 +192,5 @@ a.btn { text-decoration: none; display: inline-block; }
 }
 .map-item .btn { min-height: 44px; padding: 0 10px; }
 #map-preview img { width: 100%; max-width: 640px; image-rendering: pixelated; border: 1px solid var(--line); border-radius: 8px; }
+.zones-box { margin-top: 8px; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
+.zones-box summary { min-height: 36px; display: flex; align-items: center; cursor: pointer; }

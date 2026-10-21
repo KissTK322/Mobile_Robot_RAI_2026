@@ -610,6 +610,16 @@ def make_handler(manager):
                 except (ValueError, OSError) as e:
                     return self.send_json(400, {'error': str(e)})
                 return self.send_json(200, out)
+            if parts == ['map', 'zones'] and method in ('GET', 'POST'):
+                name = manager.maps.active()
+                if method == 'GET':
+                    return self.send_json(200, {'map': name, 'zones': manager.maps.zones(name)})
+                body = self.body_json()
+                try:
+                    z = manager.maps.set_zone(name, str(body.get('zone', '')), None if body.get('clear') else body.get('xy'))
+                except (ValueError, OSError, TypeError, IndexError) as e:
+                    return self.send_json(400, {'error': str(e)})
+                return self.send_json(200, {'map': name, 'zones': z})
             if method == 'GET' and parts == ['map', 'preview']:
                 try:
                     png = manager.maps.preview_png(parse_qs(url.query).get('name', [''])[0])

@@ -11,6 +11,7 @@ Cartographer's /map QoS. Files go to the source maps folder (kept, versioned)
 and are linked into the installed share folder, where navigation.launch.xml
 looks for them, so a new map can be used without rebuilding."""
 import io
+import json
 import math
 import os
 import re
@@ -295,6 +296,37 @@ class MapStore:
         buf = io.BytesIO()
         im.save(buf, format='PNG')
         return buf.getvalue()
+
+    # Measured zone centres (optional): the robot put on the real centre of a zone and its
+    # AMCL position saved, for fields whose lines are not where the ideal 5 x 5 m grid
+    # puts them. Kept per map next to it as <map>.zones.json {"C_Z41": [x, y], ...}.
+    def zones_path(self, name):
+        return os.path.join(self.src_dir, name + '.zones.json')
+
+    def zones(self, name):
+        try:
+            with open(self.zones_path(name)) as f:
+                return {k: [float(v[0]), float(v[1])] for k, v in json.load(f).items()}
+        except (OSError, ValueError):
+            return {}
+
+    def set_zone(self, name, zone, xy):
+        if not re.match(r'^C_Z[1-5][1-5]$', zone or ''):
+            raise ValueError('zone must be C_Z11 .. C_Z55')
+        if not any(m['name'] == name for m in self.list()):
+            raise ValueError(f'No map called {name}')
+        z = self.zones(name)
+        if xy is None:
+            z.pop(zone, None)
+        else:
+            x, y = float(xy[0]), float(xy[1])
+            a, b = int(zone[3]), int(zone[4])
+            if math.hypot(x - (a - 0.5), y - (b - 0.5)) > 0.45:
+                raise ValueError(f'({x:.2f}, {y:.2f}) is too far from the grid centre of {zone}; is the map aligned?')
+            z[zone] = [round(x, 3), round(y, 3)]
+        with open(self.zones_path(name), 'w') as f:
+            json.dump(dict(sorted(z.items())), f, indent=1)
+        return z
 
     def select(self, name):
         if not any(m['name'] == name for m in self.list()):

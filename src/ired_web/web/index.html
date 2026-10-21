@@ -83,6 +83,17 @@
         <label class="small nav-snap"><input type="checkbox" id="nav-snap" checked> Snap to zone centre</label>
       </div>
       <p class="small" id="nav-msg">Navigation: tap the map to choose a goal.</p>
+      <details class="zones-box" id="zones-box">
+        <summary class="small">Measured zone centres (optional)</summary>
+        <p class="muted small">For a field whose lines are not where the 5 x 5 m grid is: put the robot on the real
+          centre of a zone (Navigation running, position settled), then save it. Snap then uses the saved point.</p>
+        <label class="small nav-snap"><input type="checkbox" id="zones-use"> Snap uses measured centres</label>
+        <div class="nav-row">
+          <button class="btn" id="zones-save">Save robot position as zone centre</button>
+          <button class="btn" id="zones-clear">Clear this zone</button>
+        </div>
+        <p class="small" id="zones-msg"></p>
+      </details>
       <div class="pads pads-small">
         <div class="pad-wrap">
           <div class="pad" id="pad-move-m"><div class="knob"></div></div>
