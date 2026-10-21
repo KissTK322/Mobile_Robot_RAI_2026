@@ -30,14 +30,36 @@ from ired_challenge.grid_planner import GridPlanner
 from ired_challenge.navigation_task import NavigationTask
 
 
+def split_at_corners(points, min_turn_deg=20.0):
+    """[p0, p1, ...] -> straight pieces [[p0, .., pk], [pk, ..], ...], cut where the
+    route turns by more than min_turn_deg (very short steps are not corners)."""
+    pieces, cur = [], [points[0]]
+    for i in range(1, len(points) - 1):
+        a, b, c = points[i - 1], points[i], points[i + 1]
+        h1 = math.atan2(b[1] - a[1], b[0] - a[0])
+        h2 = math.atan2(c[1] - b[1], c[0] - b[0])
+        turn = abs(math.degrees(math.atan2(math.sin(h2 - h1), math.cos(h2 - h1))))
+        cur.append(b)
+        if turn > min_turn_deg and math.dist(a, b) > 0.05 and math.dist(b, c) > 0.05:
+            pieces.append(cur)
+            cur = [b]
+    cur.append(points[-1])
+    pieces.append(cur)
+    return pieces
+
+
 class Nav2Adapter:
     """The small interface NavigationTask expects, on top of nav2_simple_commander."""
 
-    def __init__(self, navigator, escape=None):
+    def __init__(self, navigator, escape=None, legs=False):
         self.n = navigator
         self.active = False
         self.last = 'succeeded'
         self._escape = escape
+        # legs: send a grid/lanes route one straight piece at a time instead of as one path,
+        # so DWB's local goal never sits across a corner (behind a box or a fence)
+        self.legs = legs
+        self.pending = []           # later pieces of the current route, with the yaw
 
     def go_to(self, x, y, yaw):
         p = PoseStamped()
@@ -51,6 +73,14 @@ class Nav2Adapter:
 
     def go_via(self, points, yaw, spacing=0.05):
         """Follow the grid route with Nav2's controller only (no Nav2 planning)."""
+        self.pending = []
+        if self.legs and len(points) > 2:
+            pieces = split_at_corners(points)
+            self.pending = [(pc, yaw) for pc in pieces[1:]]
+            points = pieces[0]
+        self._follow(points, yaw, spacing)
+
+    def _follow(self, points, yaw, spacing=0.05):
         path = Path()
         path.header.frame_id = 'map'
         path.header.stamp = self.n.get_clock().now().to_msg()
@@ -72,9 +102,15 @@ class Nav2Adapter:
         if self.active and self.n.isTaskComplete():
             self.active = False
             self.last = 'succeeded' if self.n.getResult() == TaskResult.SUCCEEDED else 'failed'
+            if self.last == 'succeeded' and self.pending:
+                pts, yaw = self.pending.pop(0)
+                self._follow(pts, yaw)
+            else:
+                self.pending = []
         return self.last
 
     def cancel(self):
+        self.pending = []
         if self.active and rclpy.ok():
             try:
                 self.n.cancelTask()
@@ -161,6 +197,7 @@ class NavigationChallengeNode(Node):
             # 'nav2': the first behaviour (nearest zone first, Nav2 plans every drive)
             ('route_mode', 'lanes'), ('grid_clearance', 0.32), ('grid_speed', 0.22), ('grid_tries', 1),
             ('stuck_time', 8.0), ('stuck_dist', 0.10),
+            ('route_legs', False),   # send grid/lanes routes one straight piece at a time
         ])
         g = {x.name: x.value for x in p}
         self.cfg = g
@@ -192,7 +229,7 @@ class NavigationChallengeNode(Node):
         # navigation.yaml (or the web app), so wait only for the lifecycle nodes to be active.
         wait_nav2_active(self.navigator, self.get_logger().info)
         self.task = NavigationTask(
-            Nav2Adapter(self.navigator, self.escape), self.field, log=self.get_logger().info,
+            Nav2Adapter(self.navigator, self.escape, legs=g['route_legs']), self.field, log=self.get_logger().info,
             red_zone=g['red_zone'], dwell=g['dwell'], confirm_timeout=g['confirm_timeout'],
             drive_timeout=g['drive_timeout'], retries=g['retries'], order=g['order'],
             grid_tries=g['grid_tries'], stuck_time=g['stuck_time'], stuck_dist=g['stuck_dist'])
