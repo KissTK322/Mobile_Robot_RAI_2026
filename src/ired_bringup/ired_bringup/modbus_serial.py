@@ -11,6 +11,9 @@ from std_msgs.msg import String
 import serial
 import struct
 import crcmod
+from rclpy.qos import DurabilityPolicy, QoSProfile
+
+from ired_bringup.wheel_guard import WheelGuard
 
 class IREDController(Node):
     def __init__(self):
@@ -29,6 +32,11 @@ class IREDController(Node):
         self.create_service(Empty, '/ired/imu/reset', self.commandIMUResetCallback)
         self.create_service(Empty, '/ired/pid/reset', self.commandPIDResetCallback)
         self.create_service(PIDTuning, '/ired/pid/tuning', self.commandPIDTuningCallback)
+        self.create_service(Empty, '/ired/wheel_guard/reset', self.commandGuardResetCallback)
+        # Wheel guard state, latched: 'ok', 'off' or why it stopped the wheels
+        self.guard_pub = self.create_publisher(
+            String, '/ired/wheel_guard', QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
+        self.guard_pub.publish(String(data='ok' if self.guard.enabled else 'off'))
         
         # Initialise ROS Timers
         timer_period = 0.1 # seconds
@@ -57,6 +65,12 @@ class IREDController(Node):
         self.declare_parameter('pid_fr', [0.0, 0.0, 0.0])
         self.declare_parameter('pid_rl', [0.0, 0.0, 0.0])
         self.declare_parameter('pid_rr', [0.0, 0.0, 0.0])
+        # Wheel runaway guard (wheel_guard.py): stop all wheels when a commanded wheel's
+        # encoder reads ~0 for longer than guard_hold seconds
+        self.declare_parameter('guard_enabled', True)
+        self.declare_parameter('guard_min_cmd', 10.0)
+        self.declare_parameter('guard_zero_fb', 0.5)
+        self.declare_parameter('guard_hold', 0.5)
         
         # ROS Parameters
         self.imu_raw_topic = self.get_parameter('imu_raw_topic').get_parameter_value().string_value
@@ -87,6 +101,11 @@ class IREDController(Node):
         self.start_time = self.get_clock().now()
         self.pid_startup_queue = [m for m, g in self.pid_startup.items() if len(g) == 3 and any(g)]
         self.pid_startup_tries = {m: 0 for m in self.pid_startup_queue}
+        self.guard = WheelGuard(
+            min_cmd=self.get_parameter('guard_min_cmd').get_parameter_value().double_value,
+            zero_fb=self.get_parameter('guard_zero_fb').get_parameter_value().double_value,
+            hold=self.get_parameter('guard_hold').get_parameter_value().double_value,
+            enabled=self.get_parameter('guard_enabled').get_parameter_value().bool_value)
     
     def commandIMUResetCallback(self, request, response):
         self.get_logger().info("iRED Controller : Start Calibration of MP9250...")
@@ -98,6 +117,13 @@ class IREDController(Node):
         self.get_logger().info("iRED Controller : Reset PID Data...")
         self.pid_reset_check = True
 
+        return response
+
+    def commandGuardResetCallback(self, request, response):
+        if self.guard.tripped:
+            self.get_logger().info("iRED Controller : Wheel guard reset, wheels enabled again")
+        self.guard.reset()
+        self.guard_pub.publish(String(data='ok' if self.guard.enabled else 'off'))
         return response
 
     def commandPIDTuningCallback(self, request, response):
@@ -294,7 +320,8 @@ class IREDController(Node):
         if (time_now - self.last_time_cmd_vel).nanoseconds / 1e9 > 1.0:
             self.motor_data_msg.speed_sp = [0.0] * 4
 
-        if not self.modbusSendData(self.motor_data_msg.speed_sp, 0x0000, 4):
+        sent_sp = self.guard.output(self.motor_data_msg.speed_sp)
+        if not self.modbusSendData(sent_sp, 0x0000, 4):
             self.get_logger().warn("Cannot send data to iRED Controller...")
         
         if not self.modbusReadData(self.modbus_function_read_inputregs, 0x0000, 10) or self.modbus_read_data is None:
@@ -302,6 +329,11 @@ class IREDController(Node):
             self.get_logger().warn("Cannot read data from iRED Controller...")
         else:
             self.readInputRegs(True)
+            # only real readings count: a failed read reports zero feedback
+            trip = self.guard.update(sent_sp, self.motor_data_msg.speed_fb, time_now.nanoseconds / 1e9)
+            if trip:
+                self.get_logger().error("iRED Controller : " + trip)
+                self.guard_pub.publish(String(data=trip))
 
         self.imu_raw_pub.publish(self.imu_raw_msg)
         self.motor_data_pub.publish(self.motor_data_msg)

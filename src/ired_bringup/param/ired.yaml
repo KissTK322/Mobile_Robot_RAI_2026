@@ -46,3 +46,9 @@ iredcr_modbus_node:
     pid_fr: [6.0, 35.0, 0.05]
     pid_rl: [6.0, 35.0, 0.05]
     pid_rr: [6.0, 35.0, 0.05]
+    # Wheel runaway guard: a wheel commanded >= guard_min_cmd rpm whose encoder reads
+    # < guard_zero_fb rpm for > guard_hold s stops all wheels until /ired/wheel_guard/reset
+    guard_enabled: true
+    guard_min_cmd: 10.0
+    guard_zero_fb: 0.5
+    guard_hold: 0.5
