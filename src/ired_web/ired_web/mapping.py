@@ -19,11 +19,13 @@ import time
 
 import numpy as np
 import yaml
-from PIL import Image
+from PIL import Image, ImageDraw
 from nav_msgs.msg import OccupancyGrid, Odometry
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from rclpy.serialization import deserialize_message
 from tf2_msgs.msg import TFMessage
+
+from ired_web import field_align
 
 NAME_RE = re.compile(r'^[A-Za-z0-9_-]{1,40}$')
 
@@ -222,6 +224,77 @@ class MapStore:
         self.link_into_share(name)
         return {'name': name, 'width_m': round(msg.info.width * msg.info.resolution, 2),
                 'height_m': round(msg.info.height * msg.info.resolution, 2)}
+
+    def unique_name(self, base):
+        name, k = base[:40], 2
+        while os.path.exists(os.path.join(self.src_dir, name + '.yaml')):
+            name = f'{base[:36]}-{k}'
+            k += 1
+        return name
+
+    def align(self, name, start='auto'):
+        """Write <name>-aligned: the map turned so its frame is the field frame (field_align).
+        start 'c_z51': the map was made starting at C_Z51 facing -x (raw Cartographer map),
+        'aligned': it is already roughly field-aligned, 'auto': 'aligned' if the name says
+        field, else 'c_z51'. The original is not touched."""
+        if not any(m['name'] == name for m in self.list()):
+            raise ValueError(f'No map called {name}')
+        hints = {'c_z51': field_align.HINT_CARTOGRAPHER, 'aligned': (0.0, 0.0, 0.0)}
+        if start == 'auto':                   # guess from the name, the other one if that fails
+            first = 'aligned' if re.search(r'field|aligned', name, re.I) else 'c_z51'
+            order = [first, 'c_z51' if first == 'aligned' else 'aligned']
+        elif start in hints:
+            order = [start]
+        else:
+            raise ValueError('start must be auto, c_z51 or aligned')
+        base = re.sub(r'-(field|aligned)(-\d+)?$', '', name, flags=re.I) + '-aligned'
+        out = self.unique_name(base)
+        for i, start in enumerate(order):
+            try:
+                fit = field_align.align_file(os.path.join(self.src_dir, name + '.yaml'), self.src_dir, out,
+                                             hints[start])
+                break
+            except ValueError:
+                if i == len(order) - 1:
+                    raise
+        bad = [k for k, w in fit['walls'].items() if w['seen_m'] < 2.5]
+        if bad or not all(4.7 < v < 5.4 for v in fit['size']):
+            for ext in ('.yaml', '.pgm'):
+                os.remove(os.path.join(self.src_dir, out + ext))
+            raise ValueError(f'Field walls not found cleanly (size {fit["size"]}, short walls: {bad}). '
+                             'Map the whole field, or try the other start option.')
+        self.link_into_share(out)
+        fit.update({'name': out, 'from': name, 'start': start})
+        return fit
+
+    def preview_png(self, name, scale=3):
+        """Saved map as PNG with the 5 x 5 m zone grid drawn where the map frame puts it."""
+        if not any(m['name'] == name for m in self.list()):
+            raise ValueError(f'No map called {name}')
+        img, res, origin, _ = field_align.load_map(os.path.join(self.src_dir, name + '.yaml'))
+        h, w = img.shape
+        im = Image.fromarray(img, mode='L').convert('RGB').resize((w * scale, h * scale), Image.NEAREST)
+        d = ImageDraw.Draw(im)
+
+        def px(x, y):
+            return ((x - origin[0]) / res * scale, (h - (y - origin[1]) / res) * scale)
+        for k in range(6):
+            col, wd = ((8, 126, 156), 2) if k in (0, 5) else ((8, 126, 156), 1)
+            d.line([px(k, 0), px(k, 5)], fill=col, width=wd)
+            d.line([px(0, k), px(5, k)], fill=col, width=wd)
+        for a in range(1, 6):
+            for b in range(1, 6):
+                x, y = px(a - 0.5, b - 0.5)
+                d.line([(x - 4, y), (x + 4, y)], fill=(198, 40, 40))
+                d.line([(x, y - 4), (x, y + 4)], fill=(198, 40, 40))
+        # show the field with 1 m around it, not the whole SLAM area
+        (x0, y1), (x1, y0) = px(-1, 6), px(6, -1)
+        box = (max(0, int(x0)), max(0, int(y1)), min(im.width, int(x1)), min(im.height, int(y0)))
+        if box[2] - box[0] > 20 and box[3] - box[1] > 20:
+            im = im.crop(box)
+        buf = io.BytesIO()
+        im.save(buf, format='PNG')
+        return buf.getvalue()
 
     def select(self, name):
         if not any(m['name'] == name for m in self.list()):

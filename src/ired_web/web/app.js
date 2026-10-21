@@ -29,7 +29,10 @@ async function api(path, opts = {}) {
     askPin(j.error === 'locked' ? 'Too many wrong PINs, wait 30 s.' : (S.pin ? 'Wrong PIN.' : ''));
     throw new Error('pin');
   }
-  if (!res.ok) throw new Error('http ' + res.status);
+  if (!res.ok) {
+    const j = await res.json().catch(() => ({}));
+    throw new Error(`http ${res.status}` + (j.error ? `: ${j.error}` : ''));
+  }
   return res.json();
 }
 
@@ -579,6 +582,11 @@ function renderMap() {
     const when = document.createElement('span'); when.className = 'muted small';
     when.textContent = new Date(m.time * 1000).toLocaleString();
     row.append(name, when);
+    const view = document.createElement('button'); view.className = 'btn'; view.textContent = 'View';
+    view.onclick = () => showMapPreview(m.name, `${m.name}: blue = 5 x 5 m zone grid, red + = zone centres.`);
+    const al = document.createElement('button'); al.className = 'btn'; al.textContent = 'Align';
+    al.onclick = () => alignMap(m.name, al);
+    row.append(view, al);
     if (m.active) {
       const b = document.createElement('span'); b.className = 'badge'; b.textContent = 'in use'; row.append(b);
     } else {
@@ -593,6 +601,34 @@ function renderMap() {
 }
 
 function navMsg(t) { $('#nav-msg').textContent = t; }
+
+async function showMapPreview(name, text) {
+  const res = await fetch('/api/map/preview?name=' + encodeURIComponent(name), { headers: { 'X-Pin': S.pin } });
+  if (!res.ok) { $('#map-msg').textContent = 'Could not load that map.'; return; }
+  const img = $('#map-preview-img');
+  if (img.src) URL.revokeObjectURL(img.src);
+  img.src = URL.createObjectURL(await res.blob());
+  $('#map-preview-text').textContent = text;
+  $('#map-preview').hidden = false;
+  $('#map-preview').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+async function alignMap(name, btn) {
+  btn.disabled = true;
+  $('#map-msg').textContent = `Aligning ${name} to the field...`;
+  try {
+    const r = await api('map/align', { method: 'POST', body: { name } });
+    const walls = Object.entries(r.walls).map(([k, w]) =>
+      `${k}: seen ${w.seen_m} m, off a straight line up to ${w.max_dev_cm} cm`).join('; ');
+    $('#map-msg').textContent = `Saved ${r.name}. Field measured ${r.size[0]} x ${r.size[1]} m. ` +
+      'Check the picture: walls on the outer blue square, then "Use for Navigation".';
+    pollMap(true);
+    showMapPreview(r.name, `${r.name} (from ${r.from}). ${walls}.`);
+  } catch (e) {
+    $('#map-msg').textContent = 'Align failed: ' + String(e.message || e).replace(/^http \d+: /, '');
+  }
+  btn.disabled = false;
+}
 
 // Zone C_Zab of the 5 x 5 m field (map frame = field frame, C_Z11 corner at 0,0),
 // centre (a - 0.5, b - 0.5); null outside the field

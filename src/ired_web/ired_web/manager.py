@@ -603,6 +603,24 @@ def make_handler(manager):
                 except (ValueError, OSError) as e:
                     return self.send_json(400, {'error': str(e)})
                 return self.send_json(200, out)
+            if method == 'POST' and parts == ['map', 'align']:
+                body = self.body_json()
+                try:
+                    out = manager.maps.align(str(body.get('name', '')).strip(), str(body.get('start', 'auto')))
+                except (ValueError, OSError) as e:
+                    return self.send_json(400, {'error': str(e)})
+                return self.send_json(200, out)
+            if method == 'GET' and parts == ['map', 'preview']:
+                try:
+                    png = manager.maps.preview_png(parse_qs(url.query).get('name', [''])[0])
+                except (ValueError, OSError) as e:
+                    return self.send_json(404, {'error': str(e)})
+                self.send_response(200)
+                self.send_header('Content-Type', 'image/png')
+                self.send_header('Content-Length', str(len(png)))
+                self.end_headers()
+                self.wfile.write(png)
+                return
             if method == 'GET' and parts == ['tests']:
                 return self.send_json(200, manager.tests_info())
             if method == 'POST' and parts == ['tests', 'run']:
