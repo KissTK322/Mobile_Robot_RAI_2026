@@ -320,6 +320,11 @@ function profileState(name) {
   return p ? p.state : 'stopped';
 }
 
+// Nav2 runs from either profile: Navigation (seniors' config) or Navigation (omni)
+function navRunning() {
+  return profileState('navigation') === 'running' || profileState('navigation_omni') === 'running';
+}
+
 function renderDriveWarn() {
   const robot = profileState('robot');
   let msg = '';
@@ -565,7 +570,7 @@ function renderMap() {
       g.beginPath(); g.arc(gx, gy, 9, 0, Math.PI * 2); g.moveTo(gx - 14, gy); g.lineTo(gx + 14, gy); g.moveTo(gx, gy - 14); g.lineTo(gx, gy + 14); g.stroke();
     }
   }
-  $('#map-canvas').classList.toggle('can-goal', profileState('navigation') === 'running');
+  $('#map-canvas').classList.toggle('can-goal', navRunning());
 
   const list = $('#map-list');
   list.replaceChildren(...(info.maps || []).map((m) => {
@@ -592,7 +597,7 @@ function navMsg(t) { $('#nav-msg').textContent = t; }
 $('#map-canvas').addEventListener('click', (e) => {
   const info = MAP.info, v = MAP.view;
   if (!info || !info.have || !v) return;
-  if (profileState('navigation') !== 'running') { navMsg('Start Navigation on the Launch page first.'); return; }
+  if (!navRunning()) { navMsg('Start Navigation on the Launch page first.'); return; }
   const r = e.currentTarget.getBoundingClientRect();
   const x = info.origin[0] + ((e.clientX - r.left - v.ox) / v.k) * info.resolution;
   const y = info.origin[1] + (info.height - (e.clientY - r.top - v.oy) / v.k) * info.resolution;
@@ -638,7 +643,7 @@ $('#nav-start-pose').onclick = () => {
 };
 
 $('#map-start').onclick = () => {
-  if (profileState('navigation') === 'running' && !confirm('Mapping stops Navigation. Start mapping?')) return;
+  if (navRunning() && !confirm('Mapping stops Navigation. Start mapping?')) return;
   $('#map-msg').textContent = 'Starting mapping (Navigation is stopped if it runs)…';
   api('profiles/mapping/start', { method: 'POST' }).then(() => pollMap(true)).catch(() => {});
 };

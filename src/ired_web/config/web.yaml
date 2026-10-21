@@ -33,11 +33,17 @@ profiles:
     description: Cartographer, build a new map while driving
     command: ros2 launch ired_navigation slam.launch.xml
     requires: [robot]
-    conflicts: [navigation]
+    conflicts: [navigation, navigation_omni]
   navigation:
     title: Navigation
     description: Nav2 with the saved map and AMCL
     # {map_name}: the map chosen on the Map page (maps_dir), default map
     command: ros2 launch ired_navigation navigation.launch.xml map_name:={map_name}.yaml
     requires: [robot]
-    conflicts: [mapping]
+    conflicts: [mapping, navigation_omni]
+  navigation_omni:
+    title: Navigation (omni)
+    description: Nav2 tuned for the omni base (sideways, soft start/stop, real robot size)
+    command: ros2 launch ired_navigation navigation.launch.xml map_name:={map_name}.yaml param_name:=navigation_omni.yaml
+    requires: [robot]
+    conflicts: [mapping, navigation]
