@@ -594,16 +594,37 @@ function renderMap() {
 
 function navMsg(t) { $('#nav-msg').textContent = t; }
 
+// Zone C_Zab of the 5 x 5 m field (map frame = field frame, C_Z11 corner at 0,0),
+// centre (a - 0.5, b - 0.5); null outside the field
+function fieldZone(x, y) {
+  if (x < 0 || y < 0 || x >= 5 || y >= 5) return null;
+  const a = Math.floor(x) + 1, b = Math.floor(y) + 1;
+  return { name: `C_Z${a}${b}`, centre: [a - 0.5, b - 0.5] };
+}
+
+try {
+  $('#nav-snap').checked = localStorage.getItem('ired_nav_snap') !== '0';
+} catch (e) { /* private mode */ }
+$('#nav-snap').onchange = (e) => {
+  try { localStorage.setItem('ired_nav_snap', e.target.checked ? '1' : '0'); } catch (err) { /* private mode */ }
+};
+
 $('#map-canvas').addEventListener('click', (e) => {
   const info = MAP.info, v = MAP.view;
   if (!info || !info.have || !v) return;
   if (!navRunning()) { navMsg('Start Navigation on the Launch page first.'); return; }
   const r = e.currentTarget.getBoundingClientRect();
-  const x = info.origin[0] + ((e.clientX - r.left - v.ox) / v.k) * info.resolution;
-  const y = info.origin[1] + (info.height - (e.clientY - r.top - v.oy) / v.k) * info.resolution;
+  let x = info.origin[0] + ((e.clientX - r.left - v.ox) / v.k) * info.resolution;
+  let y = info.origin[1] + (info.height - (e.clientY - r.top - v.oy) / v.k) * info.resolution;
+  let label = '';
+  const zone = fieldZone(x, y);
+  if ($('#nav-snap').checked && zone) {
+    [x, y] = zone.centre;
+    label = `${zone.name} `;
+  }
   MAP.goal = [x, y];
   $('#nav-go').hidden = false;
-  navMsg(`Goal (${x.toFixed(2)}, ${y.toFixed(2)}) m - press Go there.`);
+  navMsg(`Goal ${label}(${x.toFixed(2)}, ${y.toFixed(2)}) m - press Go there.`);
   renderMap();
 });
 

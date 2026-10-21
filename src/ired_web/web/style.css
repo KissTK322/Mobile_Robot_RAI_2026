@@ -180,7 +180,9 @@ a.btn { text-decoration: none; display: inline-block; }
 .map-item { display: flex; align-items: center; gap: 10px; min-height: 48px; border-bottom: 1px solid var(--line); }
 .map-item .name { font-weight: 600; flex: 1; }
 .map-item .badge { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 6px; background: var(--accent); color: #fff; }
-.nav-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.nav-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; align-items: center; }
+.nav-snap { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; }
+.nav-snap input { width: 20px; height: 20px; }
 #map-canvas.can-goal { cursor: crosshair; }
 @media (orientation: landscape) and (max-height: 520px) {
   /* phone on its side: map left, controls right */
