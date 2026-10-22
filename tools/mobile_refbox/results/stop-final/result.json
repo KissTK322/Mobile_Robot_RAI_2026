@@ -1,0 +1,174 @@
+{
+  "boxes": 2,
+  "seed": 11,
+  "fixture": "stop",
+  "fault_at": 5441.334790259,
+  "first_zero_s": 0.6625280889993519,
+  "tail_max_speed": 0.0,
+  "stationary_tail": true,
+  "pose_before": [
+    4.47786,
+    0.504428
+  ],
+  "pose_after": [
+    4.43484,
+    0.5130319999999998
+  ],
+  "lease_tripped": false,
+  "game": {
+    "state": "stopped",
+    "message": "Simulated phone Stop game",
+    "layout_id": "8bfe7c3fd2514f89bc38c258d9b4f01c",
+    "config": {
+      "n": 2,
+      "seed": 11,
+      "limit_s": 600,
+      "countdown_s": 3,
+      "machines": [
+        {
+          "name": "C-CS1",
+          "type": "CS",
+          "zone": "C_Z34",
+          "rotation": 135,
+          "state": "IDLE",
+          "teamColor": "CYAN"
+        },
+        {
+          "name": "C-BS",
+          "type": "BS",
+          "zone": "C_Z14",
+          "rotation": 270,
+          "state": "IDLE",
+          "teamColor": "CYAN"
+        }
+      ],
+      "route": [
+        "C_Z54",
+        "C_Z53",
+        "C_Z21",
+        "C_Z14",
+        "C_Z42",
+        "C_Z25",
+        "C_Z15",
+        "C_Z12",
+        "C_Z24",
+        "C_Z34",
+        "C_Z33",
+        "C_Z32"
+      ]
+    },
+    "run_id": "26d02a09f76c46458a10826b3ce2e96b",
+    "remaining": [
+      "C_Z54",
+      "C_Z53",
+      "C_Z21",
+      "C_Z14",
+      "C_Z42",
+      "C_Z25",
+      "C_Z15",
+      "C_Z12",
+      "C_Z24",
+      "C_Z34",
+      "C_Z33",
+      "C_Z32"
+    ],
+    "counted": 0,
+    "elapsed_s": 0.8,
+    "countdown_left": null,
+    "time_left_s": 599.2,
+    "pose": [
+      4.435034480314773,
+      0.5024939542596093,
+      -3.124139361069849
+    ],
+    "pose_age_s": 0.56
+  },
+  "history": [
+    {
+      "id": "26d02a09f76c46458a10826b3ce2e96b",
+      "layout_id": "8bfe7c3fd2514f89bc38c258d9b4f01c",
+      "config": {
+        "n": 2,
+        "seed": 11,
+        "limit_s": 600,
+        "countdown_s": 3,
+        "machines": [
+          {
+            "name": "C-CS1",
+            "type": "CS",
+            "zone": "C_Z34",
+            "rotation": 135,
+            "state": "IDLE",
+            "teamColor": "CYAN"
+          },
+          {
+            "name": "C-BS",
+            "type": "BS",
+            "zone": "C_Z14",
+            "rotation": 270,
+            "state": "IDLE",
+            "teamColor": "CYAN"
+          }
+        ],
+        "route": [
+          "C_Z54",
+          "C_Z53",
+          "C_Z21",
+          "C_Z14",
+          "C_Z42",
+          "C_Z25",
+          "C_Z15",
+          "C_Z12",
+          "C_Z24",
+          "C_Z34",
+          "C_Z33",
+          "C_Z32"
+        ]
+      },
+      "state": "stopped",
+      "reason": "Simulated phone Stop game",
+      "saved_at": 1792684278.2952983,
+      "elapsed_s": 0.81,
+      "counted": 0,
+      "done_at": {},
+      "remaining": [
+        "C_Z54",
+        "C_Z53",
+        "C_Z21",
+        "C_Z14",
+        "C_Z42",
+        "C_Z25",
+        "C_Z15",
+        "C_Z12",
+        "C_Z24",
+        "C_Z34",
+        "C_Z33",
+        "C_Z32"
+      ]
+    }
+  ],
+  "last_nav": {
+    "state": "WAIT_GAME",
+    "target": null,
+    "plan": [],
+    "visited": [],
+    "red_zone_done": false,
+    "retries": 1,
+    "deferred": [],
+    "game_on": false,
+    "practice_watchdog_ok": true,
+    "pose": [
+      4.422,
+      0.505,
+      -3.121
+    ],
+    "zone_now": "C_Z51",
+    "mps_zones": [],
+    "mps_boxes": [],
+    "remaining": [],
+    "game_s": 7.5
+  },
+  "harness_cpu_one_core_percent": 9.9,
+  "duration_s": 10.854024959000526,
+  "contacts": 0
+}

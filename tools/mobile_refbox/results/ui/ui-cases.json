@@ -1,0 +1,17 @@
+[
+  {
+    "boxes": "2",
+    "rows": 2,
+    "startEnabled": false
+  },
+  {
+    "boxes": "3",
+    "rows": 3,
+    "startEnabled": false
+  },
+  {
+    "boxes": "4",
+    "rows": 4,
+    "startEnabled": false
+  }
+]

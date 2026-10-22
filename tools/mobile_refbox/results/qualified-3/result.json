@@ -1,0 +1,179 @@
+{
+  "boxes": 3,
+  "seed": 11,
+  "fixture": "game",
+  "final_stop_verified": true,
+  "game": {
+    "state": "finished",
+    "message": "All targets counted",
+    "layout_id": "833a5775432046c1a4c0b4cee4129f41",
+    "config": {
+      "n": 3,
+      "seed": 11,
+      "limit_s": 600,
+      "countdown_s": 3,
+      "machines": [
+        {
+          "name": "C-CS1",
+          "type": "CS",
+          "zone": "C_Z43",
+          "rotation": 135,
+          "state": "IDLE",
+          "teamColor": "CYAN"
+        },
+        {
+          "name": "C-RS1",
+          "type": "RS",
+          "zone": "C_Z14",
+          "rotation": 270,
+          "state": "IDLE",
+          "teamColor": "CYAN"
+        },
+        {
+          "name": "C-BS",
+          "type": "BS",
+          "zone": "C_Z45",
+          "rotation": 0,
+          "state": "IDLE",
+          "teamColor": "CYAN"
+        }
+      ],
+      "route": [
+        "C_Z14",
+        "C_Z42",
+        "C_Z25",
+        "C_Z15",
+        "C_Z13",
+        "C_Z12",
+        "C_Z34",
+        "C_Z23",
+        "C_Z32",
+        "C_Z33",
+        "C_Z53",
+        "C_Z35"
+      ]
+    },
+    "run_id": "b4b2fceca9524ff6bbf209e075c70475",
+    "remaining": [],
+    "counted": 12,
+    "elapsed_s": 154.1,
+    "countdown_left": null,
+    "time_left_s": 445.9,
+    "pose": [
+      4.469293694668237,
+      2.4322942003958046,
+      2.600540585471551
+    ],
+    "pose_age_s": 0.14
+  },
+  "history": [
+    {
+      "id": "b4b2fceca9524ff6bbf209e075c70475",
+      "layout_id": "833a5775432046c1a4c0b4cee4129f41",
+      "config": {
+        "n": 3,
+        "seed": 11,
+        "limit_s": 600,
+        "countdown_s": 3,
+        "machines": [
+          {
+            "name": "C-CS1",
+            "type": "CS",
+            "zone": "C_Z43",
+            "rotation": 135,
+            "state": "IDLE",
+            "teamColor": "CYAN"
+          },
+          {
+            "name": "C-RS1",
+            "type": "RS",
+            "zone": "C_Z14",
+            "rotation": 270,
+            "state": "IDLE",
+            "teamColor": "CYAN"
+          },
+          {
+            "name": "C-BS",
+            "type": "BS",
+            "zone": "C_Z45",
+            "rotation": 0,
+            "state": "IDLE",
+            "teamColor": "CYAN"
+          }
+        ],
+        "route": [
+          "C_Z14",
+          "C_Z42",
+          "C_Z25",
+          "C_Z15",
+          "C_Z13",
+          "C_Z12",
+          "C_Z34",
+          "C_Z23",
+          "C_Z32",
+          "C_Z33",
+          "C_Z53",
+          "C_Z35"
+        ]
+      },
+      "state": "finished",
+      "reason": "All targets counted",
+      "saved_at": 1792685399.0274231,
+      "elapsed_s": 154.06,
+      "counted": 12,
+      "done_at": {
+        "C_Z32": 25.95,
+        "C_Z23": 36.95,
+        "C_Z12": 49.95,
+        "C_Z13": 59.95,
+        "C_Z14": 71.94,
+        "C_Z15": 87.97,
+        "C_Z25": 98.94,
+        "C_Z35": 108.95,
+        "C_Z34": 119.94,
+        "C_Z33": 130.95,
+        "C_Z42": 142.95,
+        "C_Z53": 153.95
+      },
+      "remaining": []
+    }
+  ],
+  "last_nav": {
+    "state": "WAIT_GAME",
+    "target": null,
+    "plan": [
+      "C_Z53"
+    ],
+    "visited": [
+      "C_Z32",
+      "C_Z23",
+      "C_Z12",
+      "C_Z13",
+      "C_Z14",
+      "C_Z15",
+      "C_Z25",
+      "C_Z35",
+      "C_Z34",
+      "C_Z33",
+      "C_Z42"
+    ],
+    "red_zone_done": true,
+    "retries": 0,
+    "deferred": [],
+    "game_on": false,
+    "practice_watchdog_ok": true,
+    "pose": [
+      4.499,
+      2.468,
+      2.601
+    ],
+    "zone_now": "C_Z53",
+    "mps_zones": [],
+    "mps_boxes": [],
+    "remaining": [],
+    "game_s": 156.1
+  },
+  "harness_cpu_one_core_percent": 11.4,
+  "duration_s": 160.11696098299944,
+  "contacts": 0
+}

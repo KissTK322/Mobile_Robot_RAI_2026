@@ -1,0 +1,195 @@
+{
+  "boxes": 4,
+  "seed": 11,
+  "fixture": "game",
+  "final_stop_verified": true,
+  "game": {
+    "state": "finished",
+    "message": "All targets counted",
+    "layout_id": "4ae86caf5157442c8785b6ed7d020785",
+    "config": {
+      "n": 4,
+      "seed": 11,
+      "limit_s": 600,
+      "countdown_s": 3,
+      "machines": [
+        {
+          "name": "C-RS2",
+          "type": "RS",
+          "zone": "C_Z43",
+          "rotation": 135,
+          "state": "IDLE",
+          "teamColor": "CYAN"
+        },
+        {
+          "name": "C-RS1",
+          "type": "RS",
+          "zone": "C_Z14",
+          "rotation": 270,
+          "state": "IDLE",
+          "teamColor": "CYAN"
+        },
+        {
+          "name": "C-CS1",
+          "type": "CS",
+          "zone": "C_Z45",
+          "rotation": 180,
+          "state": "IDLE",
+          "teamColor": "CYAN"
+        },
+        {
+          "name": "C-BS",
+          "type": "BS",
+          "zone": "C_Z12",
+          "rotation": 270,
+          "state": "IDLE",
+          "teamColor": "CYAN"
+        }
+      ],
+      "route": [
+        "C_Z25",
+        "C_Z15",
+        "C_Z13",
+        "C_Z45",
+        "C_Z12",
+        "C_Z34",
+        "C_Z42",
+        "C_Z32",
+        "C_Z33",
+        "C_Z55",
+        "C_Z43",
+        "C_Z53"
+      ]
+    },
+    "run_id": "1a54d5de751e4eebb65de4602ddcd028",
+    "remaining": [],
+    "counted": 12,
+    "elapsed_s": 179.7,
+    "countdown_left": null,
+    "time_left_s": 420.3,
+    "pose": [
+      0.6206442346790434,
+      4.490629007314615,
+      2.844886680750758
+    ],
+    "pose_age_s": 0.15
+  },
+  "history": [
+    {
+      "id": "1a54d5de751e4eebb65de4602ddcd028",
+      "layout_id": "4ae86caf5157442c8785b6ed7d020785",
+      "config": {
+        "n": 4,
+        "seed": 11,
+        "limit_s": 600,
+        "countdown_s": 3,
+        "machines": [
+          {
+            "name": "C-RS2",
+            "type": "RS",
+            "zone": "C_Z43",
+            "rotation": 135,
+            "state": "IDLE",
+            "teamColor": "CYAN"
+          },
+          {
+            "name": "C-RS1",
+            "type": "RS",
+            "zone": "C_Z14",
+            "rotation": 270,
+            "state": "IDLE",
+            "teamColor": "CYAN"
+          },
+          {
+            "name": "C-CS1",
+            "type": "CS",
+            "zone": "C_Z45",
+            "rotation": 180,
+            "state": "IDLE",
+            "teamColor": "CYAN"
+          },
+          {
+            "name": "C-BS",
+            "type": "BS",
+            "zone": "C_Z12",
+            "rotation": 270,
+            "state": "IDLE",
+            "teamColor": "CYAN"
+          }
+        ],
+        "route": [
+          "C_Z25",
+          "C_Z15",
+          "C_Z13",
+          "C_Z45",
+          "C_Z12",
+          "C_Z34",
+          "C_Z42",
+          "C_Z32",
+          "C_Z33",
+          "C_Z55",
+          "C_Z43",
+          "C_Z53"
+        ]
+      },
+      "state": "finished",
+      "reason": "All targets counted",
+      "saved_at": 1792684871.1946046,
+      "elapsed_s": 179.75,
+      "counted": 12,
+      "done_at": {
+        "C_Z32": 25.62,
+        "C_Z12": 45.63,
+        "C_Z13": 61.62,
+        "C_Z33": 76.62,
+        "C_Z43": 87.63,
+        "C_Z42": 97.62,
+        "C_Z53": 108.62,
+        "C_Z55": 125.62,
+        "C_Z45": 145.62,
+        "C_Z34": 154.62,
+        "C_Z25": 167.62,
+        "C_Z15": 179.63
+      },
+      "remaining": []
+    }
+  ],
+  "last_nav": {
+    "state": "WAIT_GAME",
+    "target": null,
+    "plan": [
+      "C_Z15"
+    ],
+    "visited": [
+      "C_Z32",
+      "C_Z12",
+      "C_Z13",
+      "C_Z33",
+      "C_Z43",
+      "C_Z42",
+      "C_Z53",
+      "C_Z55",
+      "C_Z45",
+      "C_Z34",
+      "C_Z25"
+    ],
+    "red_zone_done": true,
+    "retries": 0,
+    "deferred": [],
+    "game_on": false,
+    "practice_watchdog_ok": true,
+    "pose": [
+      0.588,
+      4.494,
+      2.843
+    ],
+    "zone_now": "C_Z15",
+    "mps_zones": [],
+    "mps_boxes": [],
+    "remaining": [],
+    "game_s": 182.1
+  },
+  "harness_cpu_one_core_percent": 11.5,
+  "duration_s": 185.7902017769993,
+  "contacts": 0
+}

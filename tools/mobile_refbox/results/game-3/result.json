@@ -1,0 +1,200 @@
+{
+  "boxes": 3,
+  "seed": 11,
+  "fixture": "game",
+  "game": {
+    "state": "finished",
+    "message": "All targets counted",
+    "layout_id": "4ca0bdd64b994fbca43354a16e10b829",
+    "config": {
+      "n": 3,
+      "seed": 11,
+      "limit_s": 600,
+      "countdown_s": 3,
+      "machines": [
+        {
+          "name": "C-CS1",
+          "type": "CS",
+          "zone": "C_Z43",
+          "rotation": 135,
+          "state": "IDLE",
+          "teamColor": "CYAN"
+        },
+        {
+          "name": "C-RS1",
+          "type": "RS",
+          "zone": "C_Z14",
+          "rotation": 270,
+          "state": "IDLE",
+          "teamColor": "CYAN"
+        },
+        {
+          "name": "C-BS",
+          "type": "BS",
+          "zone": "C_Z45",
+          "rotation": 0,
+          "state": "IDLE",
+          "teamColor": "CYAN"
+        }
+      ],
+      "route": [
+        "C_Z14",
+        "C_Z42",
+        "C_Z25",
+        "C_Z15",
+        "C_Z13",
+        "C_Z12",
+        "C_Z34",
+        "C_Z23",
+        "C_Z32",
+        "C_Z33",
+        "C_Z53",
+        "C_Z35"
+      ]
+    },
+    "run_id": "8339a97823be4a668fc02ad1dc467c0a",
+    "remaining": [],
+    "counted": 12,
+    "elapsed_s": 155.8,
+    "countdown_left": null,
+    "time_left_s": 444.2,
+    "pose": [
+      4.48495909169227,
+      2.4626179577582388,
+      2.670353755551324
+    ],
+    "pose_age_s": 0.13
+  },
+  "history": [
+    {
+      "id": "8339a97823be4a668fc02ad1dc467c0a",
+      "layout_id": "4ca0bdd64b994fbca43354a16e10b829",
+      "config": {
+        "n": 3,
+        "seed": 11,
+        "limit_s": 600,
+        "countdown_s": 3,
+        "machines": [
+          {
+            "name": "C-CS1",
+            "type": "CS",
+            "zone": "C_Z43",
+            "rotation": 135,
+            "state": "IDLE",
+            "teamColor": "CYAN"
+          },
+          {
+            "name": "C-RS1",
+            "type": "RS",
+            "zone": "C_Z14",
+            "rotation": 270,
+            "state": "IDLE",
+            "teamColor": "CYAN"
+          },
+          {
+            "name": "C-BS",
+            "type": "BS",
+            "zone": "C_Z45",
+            "rotation": 0,
+            "state": "IDLE",
+            "teamColor": "CYAN"
+          }
+        ],
+        "route": [
+          "C_Z14",
+          "C_Z42",
+          "C_Z25",
+          "C_Z15",
+          "C_Z13",
+          "C_Z12",
+          "C_Z34",
+          "C_Z23",
+          "C_Z32",
+          "C_Z33",
+          "C_Z53",
+          "C_Z35"
+        ]
+      },
+      "state": "finished",
+      "reason": "All targets counted",
+      "saved_at": 1792684677.4332733,
+      "elapsed_s": 155.78,
+      "counted": 12,
+      "done_at": {
+        "C_Z32": 25.66,
+        "C_Z23": 37.66,
+        "C_Z12": 50.65,
+        "C_Z13": 60.65,
+        "C_Z14": 72.68,
+        "C_Z15": 88.66,
+        "C_Z25": 99.65,
+        "C_Z35": 110.65,
+        "C_Z34": 121.65,
+        "C_Z33": 132.66,
+        "C_Z42": 144.65,
+        "C_Z53": 155.65
+      },
+      "remaining": []
+    }
+  ],
+  "last_nav": {
+    "state": "DWELL",
+    "target": "C_Z53",
+    "plan": [
+      "C_Z53"
+    ],
+    "visited": [
+      "C_Z32",
+      "C_Z23",
+      "C_Z12",
+      "C_Z13",
+      "C_Z14",
+      "C_Z15",
+      "C_Z25",
+      "C_Z35",
+      "C_Z34",
+      "C_Z33",
+      "C_Z42"
+    ],
+    "red_zone_done": true,
+    "retries": 0,
+    "deferred": [],
+    "game_on": true,
+    "practice_watchdog_ok": true,
+    "pose": [
+      4.487,
+      2.465,
+      2.679
+    ],
+    "zone_now": "C_Z53",
+    "mps_zones": [
+      "C_Z43",
+      "C_Z14",
+      "C_Z45"
+    ],
+    "mps_boxes": [
+      [
+        3.5,
+        2.5,
+        135.0
+      ],
+      [
+        0.5,
+        3.5,
+        270.0
+      ],
+      [
+        3.5,
+        4.5,
+        0.0
+      ]
+    ],
+    "remaining": [
+      "C_Z53"
+    ],
+    "game_s": 155.1
+  },
+  "harness_cpu_one_core_percent": 11.6,
+  "duration_s": 158.81017355699987,
+  "contacts": 0
+}

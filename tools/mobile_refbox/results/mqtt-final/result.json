@@ -1,0 +1,201 @@
+{
+  "boxes": 2,
+  "seed": 11,
+  "fixture": "mqtt-loss",
+  "fault_at": 5488.660131532,
+  "first_zero_s": 0.549274764999609,
+  "tail_max_speed": 0.0,
+  "stationary_tail": true,
+  "pose_before": [
+    4.47102,
+    0.506228
+  ],
+  "pose_after": [
+    4.445202857142858,
+    0.5148337142857141
+  ],
+  "lease_tripped": false,
+  "game": {
+    "state": "error",
+    "message": "Practice MQTT disconnected; prepare a new round",
+    "layout_id": "cdf099b7089c4d2087657e7f584fde47",
+    "config": {
+      "n": 2,
+      "seed": 11,
+      "limit_s": 600,
+      "countdown_s": 3,
+      "machines": [
+        {
+          "name": "C-CS1",
+          "type": "CS",
+          "zone": "C_Z34",
+          "rotation": 135,
+          "state": "IDLE",
+          "teamColor": "CYAN"
+        },
+        {
+          "name": "C-BS",
+          "type": "BS",
+          "zone": "C_Z14",
+          "rotation": 270,
+          "state": "IDLE",
+          "teamColor": "CYAN"
+        }
+      ],
+      "route": [
+        "C_Z54",
+        "C_Z53",
+        "C_Z21",
+        "C_Z14",
+        "C_Z42",
+        "C_Z25",
+        "C_Z15",
+        "C_Z12",
+        "C_Z24",
+        "C_Z34",
+        "C_Z33",
+        "C_Z32"
+      ]
+    },
+    "run_id": "512343b2e6314cd48e39c0da44e1feb8",
+    "remaining": [
+      "C_Z54",
+      "C_Z53",
+      "C_Z21",
+      "C_Z14",
+      "C_Z42",
+      "C_Z25",
+      "C_Z15",
+      "C_Z12",
+      "C_Z24",
+      "C_Z34",
+      "C_Z33",
+      "C_Z32"
+    ],
+    "counted": 0,
+    "elapsed_s": 1.5,
+    "countdown_left": null,
+    "time_left_s": 598.5,
+    "pose": [
+      4.497328849598878,
+      0.4939178879015511,
+      -3.141592653589793
+    ],
+    "pose_age_s": 7.73
+  },
+  "history": [
+    {
+      "id": "512343b2e6314cd48e39c0da44e1feb8",
+      "layout_id": "cdf099b7089c4d2087657e7f584fde47",
+      "config": {
+        "n": 2,
+        "seed": 11,
+        "limit_s": 600,
+        "countdown_s": 3,
+        "machines": [
+          {
+            "name": "C-CS1",
+            "type": "CS",
+            "zone": "C_Z34",
+            "rotation": 135,
+            "state": "IDLE",
+            "teamColor": "CYAN"
+          },
+          {
+            "name": "C-BS",
+            "type": "BS",
+            "zone": "C_Z14",
+            "rotation": 270,
+            "state": "IDLE",
+            "teamColor": "CYAN"
+          }
+        ],
+        "route": [
+          "C_Z54",
+          "C_Z53",
+          "C_Z21",
+          "C_Z14",
+          "C_Z42",
+          "C_Z25",
+          "C_Z15",
+          "C_Z12",
+          "C_Z24",
+          "C_Z34",
+          "C_Z33",
+          "C_Z32"
+        ]
+      },
+      "state": "error",
+      "reason": "Practice MQTT disconnected; prepare a new round",
+      "saved_at": 1792684325.666355,
+      "elapsed_s": 1.46,
+      "counted": 0,
+      "done_at": {},
+      "remaining": [
+        "C_Z54",
+        "C_Z53",
+        "C_Z21",
+        "C_Z14",
+        "C_Z42",
+        "C_Z25",
+        "C_Z15",
+        "C_Z12",
+        "C_Z24",
+        "C_Z34",
+        "C_Z33",
+        "C_Z32"
+      ]
+    }
+  ],
+  "last_nav": {
+    "state": "WAIT_GAME",
+    "target": null,
+    "plan": [],
+    "visited": [],
+    "red_zone_done": false,
+    "retries": 1,
+    "deferred": [],
+    "game_on": false,
+    "practice_watchdog_ok": true,
+    "pose": [
+      4.43,
+      0.51,
+      -3.121
+    ],
+    "zone_now": "C_Z51",
+    "mps_zones": [
+      "C_Z34",
+      "C_Z14"
+    ],
+    "mps_boxes": [
+      [
+        2.5,
+        3.5,
+        135.0
+      ],
+      [
+        0.5,
+        3.5,
+        270.0
+      ]
+    ],
+    "remaining": [
+      "C_Z54",
+      "C_Z53",
+      "C_Z21",
+      "C_Z14",
+      "C_Z42",
+      "C_Z25",
+      "C_Z15",
+      "C_Z12",
+      "C_Z24",
+      "C_Z34",
+      "C_Z33",
+      "C_Z32"
+    ],
+    "game_s": 7.6
+  },
+  "harness_cpu_one_core_percent": 9.6,
+  "duration_s": 11.506590439999854,
+  "contacts": 0
+}

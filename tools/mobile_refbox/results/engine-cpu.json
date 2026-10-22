@@ -1,0 +1,8 @@
+{
+  "cycles": 3000,
+  "cpu_ms_median": 0.0436305,
+  "cpu_ms_p95": 0.103143,
+  "cpu_ms_max": 0.500112,
+  "estimated_one_core_percent_at_5Hz": 0.026815101666666667,
+  "scope": "PC game engine + pose + JSON status only; no ROS/MQTT/network or Pi measurement"
+}

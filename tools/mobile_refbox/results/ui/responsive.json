@@ -1,0 +1,32 @@
+[
+  {
+    "width": 375,
+    "height": 812,
+    "contentWidth": 360,
+    "minControlHeight": 44
+  },
+  {
+    "width": 812,
+    "height": 375,
+    "contentWidth": 797,
+    "minControlHeight": 44
+  },
+  {
+    "width": 768,
+    "height": 1024,
+    "contentWidth": 753,
+    "minControlHeight": 44
+  },
+  {
+    "width": 1024,
+    "height": 1366,
+    "contentWidth": 1024,
+    "minControlHeight": 44
+  },
+  {
+    "width": 1280,
+    "height": 900,
+    "contentWidth": 1265,
+    "minControlHeight": 44
+  }
+]
