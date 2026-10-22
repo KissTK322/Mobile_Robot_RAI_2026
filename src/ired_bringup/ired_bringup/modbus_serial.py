@@ -71,6 +71,8 @@ class IREDController(Node):
         self.declare_parameter('guard_min_cmd', 10.0)
         self.declare_parameter('guard_zero_fb', 0.5)
         self.declare_parameter('guard_hold', 0.5)
+        self.declare_parameter('guard_over_ratio', 2.0)
+        self.declare_parameter('guard_over_margin', 20.0)
         
         # ROS Parameters
         self.imu_raw_topic = self.get_parameter('imu_raw_topic').get_parameter_value().string_value
@@ -105,7 +107,9 @@ class IREDController(Node):
             min_cmd=self.get_parameter('guard_min_cmd').get_parameter_value().double_value,
             zero_fb=self.get_parameter('guard_zero_fb').get_parameter_value().double_value,
             hold=self.get_parameter('guard_hold').get_parameter_value().double_value,
-            enabled=self.get_parameter('guard_enabled').get_parameter_value().bool_value)
+            enabled=self.get_parameter('guard_enabled').get_parameter_value().bool_value,
+            over_ratio=self.get_parameter('guard_over_ratio').get_parameter_value().double_value,
+            over_margin=self.get_parameter('guard_over_margin').get_parameter_value().double_value)
     
     def commandIMUResetCallback(self, request, response):
         self.get_logger().info("iRED Controller : Start Calibration of MP9250...")

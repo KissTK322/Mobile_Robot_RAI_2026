@@ -45,3 +45,17 @@ def test_reset_and_disabled():
     assert not g.tripped and g.output([1, 2, 3, 4]) == [1, 2, 3, 4]
     off = WheelGuard(enabled=False)
     assert run(off, [([60] * 4, [0.0] * 4)] * 20) == (None, None)
+
+
+def test_overspeed_trips():
+    # FL read -44..-72 rpm for a -10 rpm command (2026-10-22)
+    g = WheelGuard()
+    trip, k = run(g, [([-10, 10, -10, 10], [-50, 10, -10, 10])] * 10)
+    assert trip.startswith('FL wheel runs at -50 rpm') and k == 6
+
+
+def test_normal_overshoot_does_not_trip():
+    # PID overshoot ~20 % and start-up spikes stay under 2 x command + 20 rpm
+    g = WheelGuard()
+    steps = [([60] * 4, [72] * 4)] * 20 + [([10] * 4, [25] * 4)] * 20
+    assert run(g, steps) == (None, None)

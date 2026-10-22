@@ -52,3 +52,6 @@ iredcr_modbus_node:
     guard_min_cmd: 10.0
     guard_zero_fb: 0.5
     guard_hold: 0.5
+    # ... and also when a wheel runs faster than guard_over_ratio * command + guard_over_margin rpm
+    guard_over_ratio: 2.0
+    guard_over_margin: 20.0
