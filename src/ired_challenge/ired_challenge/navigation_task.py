@@ -113,7 +113,8 @@ class NavigationTask:
 
     def info(self):
         return {'state': self.state, 'target': self.target, 'plan': self.plan,
-                'visited': self.visited, 'red_zone_done': self.red_done}
+                'visited': self.visited, 'red_zone_done': self.red_done,
+                'retries': getattr(self, 'retry_total', 0), 'deferred': list(getattr(self, 'deferred', []))}
 
     # ---------------------------------------------------------------- main step
     def update(self, now, game_on, remaining, pose):
@@ -232,6 +233,7 @@ class NavigationTask:
             self.nav.escape()
             self.fast_fails = 0
         self.tries += 1
+        self.retry_total = getattr(self, 'retry_total', 0) + 1
         zone = self.target
         if self.tries <= self.retries:
             self.log(f'{zone}: try {self.tries + 1} of {self.retries + 1}')

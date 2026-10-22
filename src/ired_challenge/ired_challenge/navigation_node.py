@@ -246,7 +246,10 @@ class NavigationChallengeNode(Node):
         self.get_logger().info(f"Navigation challenge ready (order={g['order']}, red zone {g['red_zone']})")
 
     def on_game(self, msg):
-        self.game_on = bool(msg.status)
+        on = bool(msg.status)
+        if on and not self.game_on:
+            self.game_t0 = time.monotonic()          # for the web Challenge page
+        self.game_on = on
 
     def on_routes(self, msg):
         zones = [pt.zone for r in msg.routes for pt in r.remaining]
@@ -363,8 +366,11 @@ class NavigationChallengeNode(Node):
             self.task.blocked = self.mps_zones
         now = self.get_clock().now().nanoseconds / 1e9
         info = self.task.update(now, self.game_on, self.remaining, pose)
+        t0 = getattr(self, 'game_t0', None)
         info.update(game_on=self.game_on, pose=[round(v, 3) for v in pose],
-                    zone_now=self.field.zone_at(pose[0], pose[1]), mps_zones=self.mps_zones)
+                    zone_now=self.field.zone_at(pose[0], pose[1]), mps_zones=self.mps_zones,
+                    mps_boxes=[[round(x, 3), round(y, 3), r] for x, y, r in self.mps_boxes],
+                    remaining=self.remaining, game_s=round(time.monotonic() - t0, 1) if t0 else None)
         self.state_pub.publish(String(data=json.dumps(info)))
 
 
