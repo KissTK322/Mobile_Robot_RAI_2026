@@ -26,7 +26,7 @@ from std_msgs.msg import String
 from tf2_ros import Buffer, TransformException, TransformListener
 from tf_transformations import euler_from_quaternion
 
-from ired_challenge.exploration import MachineEstimator
+from ired_challenge.exploration import MachineEstimator, allowed_rotations
 from ired_challenge.exploration_task import ExplorationTask
 from ired_challenge.field import Field
 from ired_challenge.grid_planner import seg_point_dist
@@ -107,7 +107,8 @@ class ExplorationNode(Node):
         self.task = ExplorationTask(
             Mover(self.navigator, self), self.field, self.est, self.report, log=self.get_logger().info,
             expected=g['expected'], red_zone=g['red_zone'], look_time=g['look_time'],
-            candidate=lambda z: z not in skip, free=self.free)
+            # zones that can hold a machine at all (not START, the red zone or an orange zone)
+            candidate=lambda z: z not in skip and bool(allowed_rotations(z, 'C-BS')), free=self.free)
         self.get_logger().info(f"Exploration challenge ready, looking for {g['expected']}")
 
     # ------------------------------------------------------------ inputs

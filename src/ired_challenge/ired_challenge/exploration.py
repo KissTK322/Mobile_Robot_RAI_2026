@@ -62,12 +62,17 @@ def refbox_rotation(input_dir_rad, zero_deg=0.0, sign=1.0, step=45):
 #   BS/SS: 0/180 on the top row, 90/270 on the side columns;
 #   CS/RS: 180 on the top row, 270 on the right column, 90/270 on the left column
 INTERIOR_ZONES = {'C_Z22', 'C_Z23', 'C_Z24', 'C_Z33', 'C_Z34', 'C_Z43', 'C_Z44'}
+# Course field (FinalProject_ExampleChallenge.pdf p3, confirmed by the seniors 2026-10-22):
+# the orange zones never hold an MPS station
+ORANGE_ZONES = {'C_Z13', 'C_Z35', 'C_Z52', 'C_Z54', 'C_Z55'}
 
 
 def allowed_rotations(zone, machine):
     """Rotations the refbox generator allows for `machine` (e.g. 'C-CS1') in `zone`;
     [] if the zone can never hold a machine. On the 5 x 5 field only."""
     kind = machine.split('-')[-1].rstrip('0123456789')
+    if zone in ORANGE_ZONES:
+        return []
     x, y = int(zone[3]), int(zone[4])
     if zone in INTERIOR_ZONES:
         return list(range(0, 360, 45))

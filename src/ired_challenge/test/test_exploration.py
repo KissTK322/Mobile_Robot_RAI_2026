@@ -106,25 +106,26 @@ def test_ignores_unknown_ids_far_markers_and_missing_pose():
 def test_allowed_rotations_follow_the_refbox_generator():
     from ired_challenge.exploration import allowed_rotations
     assert allowed_rotations('C_Z33', 'C-CS1') == list(range(0, 360, 45))
-    assert allowed_rotations('C_Z13', 'C-CS1') == [90, 270]        # left column: along the wall
+    assert allowed_rotations('C_Z14', 'C-CS1') == [90, 270]        # left column: along the wall
     assert allowed_rotations('C_Z53', 'C-RS1') == [270]
     assert allowed_rotations('C_Z53', 'C-BS') == [90, 270]
-    assert allowed_rotations('C_Z35', 'C-CS1') == [180]             # top row
+    assert allowed_rotations('C_Z25', 'C-CS1') == [180]             # top row
     assert allowed_rotations('C_Z45', 'C-BS') == [0, 180]
-    for never in ('C_Z11', 'C_Z31', 'C_Z51', 'C_Z15', 'C_Z55', 'C_Z32', 'C_Z42', 'C_Z52'):
+    for never in ('C_Z11', 'C_Z31', 'C_Z51', 'C_Z15', 'C_Z55', 'C_Z32', 'C_Z42', 'C_Z52',
+                  'C_Z13', 'C_Z35', 'C_Z54'):                     # + orange zones (course field)
         assert allowed_rotations(never, 'C-CS1') == []
 
 
 def test_border_rotation_snaps_to_the_allowed_one():
     rng = random.Random(3)
     est = MachineEstimator(F)
-    box, input_dir = (4.5, 3.5), math.radians(270)                   # C-CS1 in C_Z54, must be 270
-    for robot, side in [((3.0, 3.2, 0.0), 'input'), ((3.2, 4.2, -0.4), 'output'), ((3.4, 2.4, 0.6), 'input')]:
+    box, input_dir = (4.5, 2.5), math.radians(270)                   # C-CS1 in C_Z53, must be 270
+    for robot, side in [((3.0, 2.2, 0.0), 'input'), ((3.2, 3.2, -0.4), 'output'), ((3.4, 1.4, 0.6), 'input')]:
         for _ in range(5):
             pos, yaw = sighting(robot, box, input_dir, side, noise=0.02, rng=rng)
             est.add(robot, 102 if side == 'input' else 101, pos, yaw + 18)      # 18 deg systematic error
     e = est.estimate('C-CS1')
-    assert e['zone'] == 'C_Z54' and e['rotation'] == 270 and e['plausible'] and e['ready']
+    assert e['zone'] == 'C_Z53' and e['rotation'] == 270 and e['plausible'] and e['ready']
 
 
 def test_machine_in_an_impossible_zone_is_not_reported():
