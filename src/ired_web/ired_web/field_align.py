@@ -7,7 +7,8 @@ need no other change.
 How: the wall cells give the field direction (rotation that makes the occupied cells
 line up in x and y), the rough transform (`hint`, e.g. Cartographer's start pose at
 C_Z51 facing -x) picks which wall is which, each wall is then fitted with a straight
-line, and the field is centred between opposite walls. The fit reports how long each
+line, and the field is placed with the START fence on the x = 2 and y = 1 zone lines
+(anchor 'start', default) or centred between opposite walls (anchor 'centre'). The fit reports how long each
 wall is seen, how far its cells stray from a straight line (bent or crooked walls)
 and the measured field size, so a bad fit is visible before the map is used.
 
@@ -93,7 +94,7 @@ def fit_line(v, w):
     return a, b, v - (a + b * w)
 
 
-def align(img, res, origin, meta, hint=HINT_CARTOGRAPHER):
+def align(img, res, origin, meta, hint=HINT_CARTOGRAPHER, anchor='start'):
     """Find map -> field transform. Returns dict with yaw, t (field = R(yaw) map + t),
     per-wall report, measured size, or raises ValueError."""
     if abs(origin[2]) > 1e-6:
@@ -138,6 +139,26 @@ def align(img, res, origin, meta, hint=HINT_CARTOGRAPHER):
     x0, x5, y0, y5 = at_mid('x0'), at_mid('x5'), at_mid('y0'), at_mid('y5')
     tx = hx + FIELD / 2 - (x0 + x5) / 2
     ty = hy + FIELD / 2 - (y0 + y5) / 2
+    anchor_used = 'centre'
+    fence = None
+    if anchor == 'start':
+        # The START fence is the best reference for the zone grid: its upright part is the
+        # x = 2 line (C_Z21 | C_Z31) and its long part the y = 1 line (C_Z41/51 | C_Z42/52).
+        # Centring between the walls is off when the field is not exactly 5 m or a wall has
+        # a gap with the room wall behind it.
+        q = rot(p, yaw) + np.array([tx, ty])
+        fx, fy = q[:, 0], q[:, 1]
+        up = find_wall(fx, fy, 2.0, (0.15, 0.85), search=0.4, band=0.05)
+        lo = find_wall(fy, fx, 1.0, (3.2, 4.8), search=0.4, band=0.05)
+        if up is not None and lo is not None and up[1].sum() >= 6 and lo[1].sum() >= 10:
+            xf, yf = float(np.median(fx[up[1]])), float(np.median(fy[lo[1]]))
+            tx += 2.0 - xf
+            ty += 1.0 - yf
+            anchor_used = 'start fence'
+            fence = {'upright_was_x': round(xf, 3), 'long_was_y': round(yf, 3)}
+    # wall lines in the final field frame
+    walls_at = {k: round(v, 3) for k, v in (('x0', x0 - hx + tx), ('x5', x5 - hx + tx),
+                                            ('y0', y0 - hy + ty), ('y5', y5 - hy + ty))}
     for k, (a, b, r, w) in fits.items():
         report[k] = {'cells': int(len(r)), 'seen_m': round(float(w.max() - w.min()), 2) if len(w) else 0.0,
                      'rms_cm': round(float(np.sqrt((r ** 2).mean())) * 100, 1),
@@ -146,7 +167,8 @@ def align(img, res, origin, meta, hint=HINT_CARTOGRAPHER):
     names = {'x0': 'wall x=0 (C_Z11-C_Z15 side)', 'x5': 'wall x=5 (C_Z51-C_Z55 side)',
              'y0': 'wall y=0 (C_Z11-C_Z51 side)', 'y5': 'wall y=5 (C_Z15-C_Z55 side)'}
     return {'yaw': yaw, 't': (tx, ty), 'size': (round(x5 - x0, 3), round(y5 - y0, 3)),
-            'walls': {names[k]: v for k, v in report.items()}}
+            'walls': {names[k]: v for k, v in report.items()},
+            'anchor': anchor_used, 'fence': fence, 'walls_at': walls_at}
 
 
 def resample(img, res, origin, yaw, t, margin=0.5):
@@ -179,9 +201,9 @@ def save_map(img, res, origin, folder, name, meta):
         yaml.safe_dump(out, f, default_flow_style=None, sort_keys=False)
 
 
-def align_file(yaml_path, out_folder, out_name, hint=HINT_CARTOGRAPHER):
+def align_file(yaml_path, out_folder, out_name, hint=HINT_CARTOGRAPHER, anchor='start'):
     img, res, origin, meta = load_map(yaml_path)
-    fit = align(img, res, origin, meta, hint)
+    fit = align(img, res, origin, meta, hint, anchor)
     new, new_origin = resample(img, res, origin, fit['yaw'], fit['t'])
     save_map(new, res, new_origin, out_folder, out_name, meta)
     fit['yaw_deg'] = round(math.degrees(fit['yaw']), 2)

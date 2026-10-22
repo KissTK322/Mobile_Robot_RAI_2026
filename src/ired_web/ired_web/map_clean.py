@@ -66,9 +66,8 @@ def clean(img, res, origin, meta, hint=field_align.HINT_CARTOGRAPHER, margin=0.2
         _, fx, fy = field_mask(img.shape, res, origin, fit, margin)
         # distance (m) of each cell from the fitted wall lines (positive inside): the field
         # is centred on (2.5, 2.5) with the measured size, not exactly 5 x 5 m
-        c = field_align.FIELD / 2
-        hx, hy = fit['size'][0] / 2, fit['size'][1] / 2
-        edge = np.minimum.reduce([fx - (c - hx), (c + hx) - fx, fy - (c - hy), (c + hy) - fy])
+        w = fit['walls_at']        # fitted wall lines in the field frame (START-fence anchored)
+        edge = np.minimum.reduce([fx - w['x0'], w['x5'] - fx, fy - w['y0'], w['y5'] - fy])
         inside = edge > -wall_reach
         report['field'] = f'walls fitted ({fit["size"][0]:.2f} x {fit["size"][1]:.2f} m)'
     except ValueError as e:
