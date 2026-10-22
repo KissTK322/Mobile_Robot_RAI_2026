@@ -1,0 +1,39 @@
+navigation_challenge:
+  ros__parameters:
+    # Field: zone C_Zxy centre = ((x - 0.5) * zone_size + origin_x, (y - 0.5) * zone_size + origin_y)
+    # in the map frame. Check on the field that the map origin is the outer corner of C_Z11.
+    zone_size: 1.0
+    origin_x: 0.0
+    origin_y: 0.0
+    red_zone: "C_Z32"        # must be passed before the challenge counts
+    dwell: 5.5               # s in each zone (refbox needs 5 s)
+    confirm_timeout: 4.0     # extra s to wait for the refbox to count the zone
+    drive_timeout: 40.0      # s per drive before retrying
+    retries: 2               # retries per zone, then it is tried again at the end
+    order: "nearest"         # refbox accepts any order (challenges.clp); "given" = refbox order
+    avoid_mps_zones: true    # stop beside an MPS station when it stands in the target zone
+    rate: 10.0
+    map_frame: "map"
+    base_frame: "base_footprint"
+    # lanes: routes along the zone-centre lanes with right-angle turns, diagonals only
+    #        where 0.45 m from walls and boxes, narrow links and box zones cost extra time
+    #        so the order avoids risky drives (walls from /map, boxes from the refbox).
+    # grid:  fastest order on the zone grid with diagonals and corner cutting.
+    # nav2:  nearest zone first, Nav2 plans every drive (the first version).
+    # In grid and lanes Nav2 only follows the route; it plans from the second try of a zone.
+    route_mode: "lanes"
+    grid_clearance: 0.32     # m from walls and boxes for every grid link (robot radius 0.27)
+    grid_speed: 0.22         # m/s used for the time costs (not a speed limit)
+    grid_tries: 1            # tries per zone on the grid route before Nav2 plans
+    stuck_time: 8.0          # s without moving stuck_dist -> retry, long before drive_timeout
+    stuck_dist: 0.10
+
+mps_obstacles:
+  ros__parameters:
+    zone_size: 1.0
+    origin_x: 0.0
+    origin_y: 0.0
+    margin: 0.03     # m added around the 20 cm box (Nav2 inflation adds the robot radius)
+    rate: 2.0
+    map_frame: "map"
+    robot_frame: "base_footprint"   # points are sent in the robot frame, see mps_obstacles_node.py
