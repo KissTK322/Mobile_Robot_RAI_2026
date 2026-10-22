@@ -775,11 +775,22 @@ $('#nav-start-pose').onclick = () => {
 $('#map-start').onclick = () => {
   if (navRunning() && !confirm('Mapping stops Navigation. Start mapping?')) return;
   $('#map-msg').textContent = 'Starting mapping (Navigation is stopped if it runs)…';
-  api('profiles/mapping/start', { method: 'POST' }).then(() => pollMap(true)).catch(() => {});
+  // Mapping (odom) = Cartographer with the EKF odometry; plain Mapping (SLAM) stays as plan B
+  const prof = $('#map-odom').checked ? 'mapping_odom' : 'mapping';
+  api(`profiles/${prof}/start`, { method: 'POST' }).then(() => pollMap(true)).catch(() => {});
 };
 $('#map-stop').onclick = () => {
   if (!confirm('Stop mapping? A map that is not saved is lost.')) return;
-  api('profiles/mapping/stop', { method: 'POST' }).then(() => pollMap(true)).catch(() => {});
+  for (const prof of ['mapping', 'mapping_odom']) {
+    if (profileState(prof) !== 'stopped') api(`profiles/${prof}/stop`, { method: 'POST' }).catch(() => {});
+  }
+  setTimeout(() => pollMap(true), 500);
+};
+try {
+  $('#map-odom').checked = localStorage.getItem('ired_map_odom') !== '0';
+} catch (e) { /* private mode */ }
+$('#map-odom').onchange = (e) => {
+  try { localStorage.setItem('ired_map_odom', e.target.checked ? '1' : '0'); } catch (err) { /* private mode */ }
 };
 $('#map-save').onclick = async () => {
   const name = $('#map-name').value.trim();

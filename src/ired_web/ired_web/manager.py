@@ -495,7 +495,9 @@ class Manager:
         info = self.node.mapwatch.info()
         info['maps'] = self.maps.list()
         info['active'] = self.maps.active()
-        info['mapping'] = self.profiles['mapping'].info()['state'] if 'mapping' in self.profiles else 'none'
+        # Mapping (SLAM) or Mapping (odom): report the one that is not stopped
+        states = [self.profiles[n].info()['state'] for n in ('mapping', 'mapping_odom') if n in self.profiles]
+        info['mapping'] = next((st for st in states if st != 'stopped'), states[0] if states else 'none')
         return info
 
     def tests_info(self):
