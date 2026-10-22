@@ -28,6 +28,7 @@ from ired_challenge.escape import escape_direction, nearest
 from ired_challenge.field import Field, mps_footprint
 from ired_challenge.grid_planner import GridPlanner
 from ired_challenge.navigation_task import NavigationTask
+from ired_challenge.practice_lease import PracticeLease
 
 
 def split_at_corners(points, min_turn_deg=20.0):
@@ -197,12 +198,16 @@ class NavigationChallengeNode(Node):
             # 'nav2': the first behaviour (nearest zone first, Nav2 plans every drive)
             ('route_mode', 'lanes'), ('grid_clearance', 0.32), ('grid_speed', 0.22), ('grid_tries', 1),
             ('stuck_time', 8.0), ('stuck_dist', 0.10),
+            ('practice_watchdog', False),
             ('route_legs', False),   # send grid/lanes routes one straight piece at a time
         ])
         g = {x.name: x.value for x in p}
         self.cfg = g
         self.field = Field(g['zone_size'], (g['origin_x'], g['origin_y']))
         self.game_on = False
+        self.practice_lease = PracticeLease(g['practice_watchdog'])
+        if g['practice_watchdog']:
+            self.create_subscription(String, '/practice/heartbeat', lambda m: self.practice_lease.heartbeat(m.data), 10)
         self.remaining = None
         self.had_routes = False
         self.mps_zones = []
@@ -324,6 +329,8 @@ class NavigationChallengeNode(Node):
         t_end = time.monotonic() + g['escape_time']
         moved = False
         while time.monotonic() < t_end and rclpy.ok():
+            if self.practice_lease.enabled and not self.practice_lease.allowed(self.game_on):
+                break
             pose = self.pose()
             if pose is None:
                 break
@@ -359,15 +366,19 @@ class NavigationChallengeNode(Node):
         return (t.transform.translation.x, t.transform.translation.y, yaw)
 
     def step(self):
+        # Check the independent practice lease even when TF is missing.
+        effective_game_on = self.practice_lease.allowed(self.game_on)
         pose = self.pose()
         if pose is None:
+            if self.practice_lease.enabled and self.practice_lease.tripped:
+                self.task.nav.cancel()
             return
         if self.cfg['avoid_mps_zones']:
             self.task.blocked = self.mps_zones
         now = self.get_clock().now().nanoseconds / 1e9
-        info = self.task.update(now, self.game_on, self.remaining, pose)
+        info = self.task.update(now, effective_game_on, self.remaining, pose)
         t0 = getattr(self, 'game_t0', None)
-        info.update(game_on=self.game_on, pose=[round(v, 3) for v in pose],
+        info.update(game_on=effective_game_on, practice_watchdog_ok=not self.practice_lease.tripped, pose=[round(v, 3) for v in pose],
                     zone_now=self.field.zone_at(pose[0], pose[1]), mps_zones=self.mps_zones,
                     mps_boxes=[[round(x, 3), round(y, 3), r] for x, y, r in self.mps_boxes],
                     remaining=self.remaining, game_s=round(time.monotonic() - t0, 1) if t0 else None)

@@ -876,6 +876,8 @@ function subscribeGame(on) {
 }
 
 function renderGame() {
+  if (typeof renderPracticeGame === 'function' && renderPracticeGame()) return;
+  $('#game-duration-label').textContent = 'left of 10:00';
   const d = GAME.d;
   const fresh = d && Date.now() - GAME.at < 3000;
   const visited = d ? (d.visited || []) : [];
@@ -924,9 +926,15 @@ function drawGame(d, remaining, visited) {
     }
   }
   g.strokeStyle = css('--text'); g.lineWidth = 3 * dpr; g.strokeRect(X(0), Y(5), 5 * k, 5 * k);
+  // START fence with the actual exit gap between x=2 and x=2.9.
+  g.strokeStyle = css('--text'); g.lineWidth = 3 * dpr;
+  g.beginPath(); g.moveTo(X(2), Y(0)); g.lineTo(X(2), Y(1)); g.stroke();
+  g.beginPath(); g.moveTo(X(2.9), Y(1)); g.lineTo(X(5), Y(1)); g.stroke();
   for (const [bx, by, rot] of (d && d.mps_boxes) || []) {
     g.save(); g.translate(X(bx), Y(by)); g.rotate(-rot * Math.PI / 180);
-    g.fillStyle = '#7A4A00'; g.fillRect(-0.1 * k, -0.1 * k, 0.2 * k, 0.2 * k); g.restore();
+    g.fillStyle = '#7A4A00'; g.fillRect(-0.1 * k, -0.1 * k, 0.2 * k, 0.2 * k);
+    g.strokeStyle = '#7A4A00'; g.lineWidth = 2*dpr; g.beginPath(); g.moveTo(0,0); g.lineTo(.28*k,0); g.lineTo(.19*k,-.06*k); g.moveTo(.28*k,0); g.lineTo(.19*k,.06*k); g.stroke(); g.restore();
+    g.fillStyle = css('--text'); g.fillText(`${rot}°`, X(bx), Y(by+.27));
   }
   if (d && d.pose) {
     const [x, y, th] = d.pose;

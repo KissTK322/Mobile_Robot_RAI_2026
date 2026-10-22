@@ -21,6 +21,7 @@ import psutil
 import rclpy
 import yaml
 from ament_index_python.packages import get_package_share_directory
+from action_msgs.srv import CancelGoal
 from geometry_msgs.msg import TwistStamped
 from nav_msgs.msg import Odometry
 from rclpy.executors import SingleThreadedExecutor
@@ -31,6 +32,7 @@ from sensor_msgs.msg import Imu, LaserScan
 from std_msgs.msg import String
 from ired_msgs.msg import MotorData
 from ired_web.mapping import MapStore, MapWatch
+from ired_web.practice_runtime import PracticeController
 
 SHARE = get_package_share_directory('ired_web')
 ROS_SETUP = 'source /opt/ros/jazzy/setup.bash && source ~/ros_environment.bash'
@@ -50,6 +52,10 @@ def load_config():
     path = os.path.join(SHARE, 'config', 'web.yaml')
     with open(path) as f:
         cfg = yaml.safe_load(f)
+    cfg['practice_broker_config'] = os.path.join(SHARE, 'config', 'practice-mosquitto.conf')
+    cfg['practice_watchdog'] = 'false'
+    cfg['game_refbox_address'] = cfg['refbox_address']
+    cfg['game_robot_topic'] = '$(hostname -I | cut -d" " -f1)'
     cfg['log_dir'] = os.path.expanduser(cfg.get('log_dir', '~/.ros/ired_web'))
     os.makedirs(cfg['log_dir'], exist_ok=True)
     return cfg
@@ -63,7 +69,7 @@ class Profile:
         self.spec = spec
         self.cfg = cfg
         self.extra = lambda: {'map_name': 'map'}   # filled in when the profile starts (the Map page's choice)
-        self.command = spec['command'].format(**cfg, **self.extra())
+        self.command = spec['command'].format(**dict(cfg, **self.extra()))
         self.log_path = os.path.join(cfg['log_dir'], f'{name}.log')
         self.proc = None
         self.state = 'stopped'
@@ -75,7 +81,7 @@ class Profile:
         with self.lock:
             if self.proc and self.proc.poll() is None:
                 return
-            self.command = self.spec['command'].format(**self.cfg, **self.extra())
+            self.command = self.spec['command'].format(**dict(self.cfg, **self.extra()))
             log = open(self.log_path, 'w')
             log.write(f'$ {self.command}\n')
             log.flush()
@@ -391,8 +397,116 @@ class Manager:
         except Exception:                    # package not built on this machine
             share_maps = None
         self.maps = MapStore(cfg.get('maps_dir', '~/ired_ws/src/ired_navigation/maps'), share_maps, cfg['log_dir'])
+        self.practice_heartbeat_pub = self.node.create_publisher(String, '/practice/heartbeat', 10)
+        self.practice_stopping = False
+        self.game_subs = []
+        self.game_nav = {}
+        self.game_nav_at = self.game_scan_at = 0.0
+        self.game_last_parse = 0.0
+        self.last_viewed['game'] = 0.0
+        self.game_cancel_clients = [self.node.create_client(CancelGoal, path) for path in
+                                    ('/navigate_to_pose/_action/cancel_goal', '/follow_path/_action/cancel_goal')]
+        self.practice = PracticeController(os.path.join(cfg['log_dir'], 'practice'), self)
         for p in self.profiles.values():
-            p.extra = lambda: {'map_name': self.maps.active()}
+            p.extra = self.profile_fields
+
+    def profile_fields(self):
+        local = self.practice.source == 'practice'
+        return {'map_name': self.maps.active(),
+                'game_refbox_address': '127.0.0.1' if local else self.cfg['refbox_address'],
+                'game_robot_topic': 'ired-practice' if local else self.cfg['game_robot_topic'],
+                'practice_watchdog': 'true' if local else 'false'}
+
+    def send_practice_heartbeat(self):
+        token = self.practice.game.run_id
+        if token:
+            self.practice_heartbeat_pub.publish(String(data=token))
+
+    def clear_practice_feedback(self):
+        self.game_nav, self.game_nav_at = {}, 0.0
+
+    def watch_game(self, on):
+        if on and not self.game_subs:
+            from rclpy.qos import qos_profile_sensor_data
+            def nav(msg):
+                now = time.monotonic()
+                if now-self.game_last_parse < .3:
+                    return
+                self.game_last_parse = now
+                try:
+                    value = json.loads(msg.data)
+                    if isinstance(value, dict):
+                        self.game_nav, self.game_nav_at = value, now
+                except ValueError:
+                    pass
+            def scan(msg):
+                self.game_scan_at = time.monotonic()
+            self.game_subs = [self.node.create_subscription(String, '/challenge/navigation/state', nav, 10),
+                              self.node.create_subscription(LaserScan, '/scan_filtered', scan, qos_profile_sensor_data, raw=True)]
+        elif not on and self.game_subs:
+            for sub in self.game_subs:
+                self.node.destroy_subscription(sub)
+            self.game_subs = []
+            self.clear_practice_feedback()
+            self.game_scan_at = 0.0
+
+    def practice_readiness(self):
+        reasons = []
+        if self.node.estop:
+            reasons.append('Release STOP first')
+        if self.practice_stopping:
+            reasons.append('Waiting for navigation to stop')
+        if self.profiles['robot'].info()['state'] != 'running':
+            reasons.append('Start Robot on Launch')
+        if not any(self.profiles[n].info()['state'] == 'running' for n in ('navigation', 'navigation_omni', 'navigation_softstop')):
+            reasons.append('Start Navigation (soft-stop) on Launch')
+        if self.profiles['challenge_nav'].info()['state'] != 'running':
+            reasons.append('Practice challenge is not running')
+        if self.game_nav.get('practice_watchdog_ok') is False:
+            reasons.append('Practice heartbeat lease expired; prepare a new round')
+        if time.monotonic()-self.game_nav_at > 3:
+            reasons.append('Waiting for live Navigation challenge state')
+        if time.monotonic()-self.game_scan_at > 2:
+            reasons.append('Waiting for live LiDAR')
+        return reasons
+
+    def halt_practice(self, reason):
+        try:
+            # MQTT PAUSED normally cancels the task. Cancel both Nav2 action types as
+            # an independent path, including when the MQTT bridge itself was lost.
+            futures = []
+            for client in self.game_cancel_clients:
+                if client.wait_for_service(timeout_sec=.5):
+                    futures.append(client.call_async(CancelGoal.Request()))
+            end = time.monotonic()+2
+            while any(not f.done() for f in futures) and time.monotonic()<end:
+                time.sleep(.02)
+            failed = not futures or any(not f.done() or f.exception() is not None for f in futures)
+            if failed or self.practice.game.state == 'error':
+                self.node.estop = True
+            self.profiles['challenge_nav'].stop()
+        finally:
+            self.practice_stopping = False
+
+    def practice_api(self, action, body=None):
+        body = {} if body is None else body
+        if not isinstance(body, dict):
+            raise ValueError('Expected a JSON object')
+        self.viewed('game')
+        if action == 'status':
+            return self.practice.status()
+        if action == 'source':
+            if self.game_nav.get('game_on') and time.monotonic()-self.game_nav_at < 3:
+                raise ValueError('Stop the current challenge before switching refbox source')
+            return self.practice.select(body.get('source'))
+        if action == 'prepare':
+            self.practice.prepare(body)
+            return self.practice.status()
+        if action == 'start':
+            return self.practice.start(body)
+        if action == 'stop':
+            return self.practice.stop()
+        raise ValueError('Unknown practice action')
 
     def check_pin(self, ip, pin):
         count, locked = self.failures.get(ip, (0, 0.0))
@@ -417,6 +531,8 @@ class Manager:
         p.start()
 
     def stop_all(self):
+        if self.practice.game.state in ('countdown', 'running'):
+            self.practice.game.stop('All modes stopped')
         threads = [threading.Thread(target=p.stop) for n, p in self.profiles.items() if not p.spec.get('autostart')]
         for t in threads:
             t.start()
@@ -425,6 +541,8 @@ class Manager:
 
     def set_estop(self, active):
         self.node.estop = active
+        if active and self.practice.game.state in ('countdown', 'running'):
+            self.practice.game.stop('Emergency STOP pressed', error=True)
         if active and self.job:
             threading.Thread(target=self.job.stop, daemon=True).start()
 
@@ -489,6 +607,7 @@ class Manager:
             topics = set()
         self.node.watch(topics)
         self.node.mapwatch.watch(now - self.last_viewed['map'] < 5.0)
+        self.watch_game(now-self.last_viewed['game'] < 5.0 or self.practice.game.state in ('countdown', 'running'))
 
     def map_info(self):
         self.viewed('map')
@@ -561,6 +680,15 @@ def make_handler(manager):
             if method == 'GET' and parts == ['config']:
                 c = manager.cfg
                 return self.send_json(200, {k: c[k] for k in ('rosbridge_port', 'video_port', 'foxglove_port')})
+            if parts[:1] == ['practice']:
+                action = parts[1] if len(parts) == 2 else ''
+                if (method == 'GET' and action == 'status') or (method == 'POST' and action in ('source', 'prepare', 'start', 'stop')):
+                    try:
+                        out = manager.practice_api(action, self.body_json() if method == 'POST' else {})
+                    except (ValueError, TypeError) as e:
+                        return self.send_json(400, {'error': str(e)})
+                    return self.send_json(200, out)
+                return self.send_json(404, {'error': 'Unknown practice endpoint'})
             if method == 'GET' and parts == ['status']:
                 return self.send_json(200, manager.status(topics=parse_qs(url.query).get('topics') == ['1']))
             if method == 'GET' and len(parts) == 3 and parts[0] == 'profiles' and parts[2] == 'log':
@@ -572,6 +700,8 @@ def make_handler(manager):
             if method == 'POST' and len(parts) == 3 and parts[0] == 'profiles' and parts[2] in ('start', 'stop'):
                 if parts[1] not in manager.profiles:
                     return self.send_json(404, {'error': 'no such profile'})
+                if manager.practice.game.state in ('countdown', 'running'):
+                    manager.practice.game.stop('Launch profile changed during practice', error=True)
                 action = manager.start if parts[2] == 'start' else manager.profiles[parts[1]].stop
                 threading.Thread(target=action, args=(parts[1],) if parts[2] == 'start' else (), daemon=True).start()
                 return self.send_json(200, {'ok': True})
@@ -712,6 +842,7 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     finally:
+        manager.practice.close()
         executor.shutdown(timeout_sec=1.0)
         server.shutdown()
         if manager.job:

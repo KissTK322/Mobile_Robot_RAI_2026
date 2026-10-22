@@ -14,6 +14,7 @@ import json
 import os
 import sys
 import time
+import math
 
 import shutil
 import tempfile
@@ -24,6 +25,7 @@ from PIL import Image
 # IRED_WS_SRC: another checkout's src (e.g. a git worktree), default robot_ws/src
 SRC = os.environ.get('IRED_WS_SRC') or os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'src')
 sys.path.insert(0, os.path.join(SRC, 'ired_web'))
+sys.path.insert(0, os.path.join(SRC, 'ired_challenge'))
 from ired_web.mapping import MapStore  # noqa: E402  (needs `source /opt/ros/jazzy/setup.bash`)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -53,6 +55,41 @@ for profile in PROFILES:
     profile.update(requires=[], uptime=60, exit_code=None)
 
 
+from ired_web.practice import PracticeGame, ACTIVE, KINDS, ZONES
+from ired_challenge.exploration import allowed_rotations
+
+
+class FakePractice:
+    """Real rules/engine/persistence, fake connection and stationary pose only."""
+    def __init__(self):
+        self.source = 'field'
+        self.game = PracticeGame(os.path.join(TMP, 'practice'), lambda *a: None,
+                                 lambda: [] if self.source == 'practice' else ['Select Practice first'])
+
+    def status(self):
+        self.game.on_pose(4.5, .5, math.pi)
+        self.game.tick()
+        return dict(self.game.snapshot(), source=self.source, busy=False, error='',
+                    fake=True, broker_connected=self.source == 'practice',
+                    ready_reasons=[] if self.source == 'practice' else ['Select Practice first'],
+                    layouts=self.game.saved(), history=self.game.history(),
+                    placement_rules={name: {z: allowed_rotations(z, name) for z in ZONES if allowed_rotations(z, name)} for name in KINDS[4]})
+
+    def api(self, action, body):
+        if action == 'source':
+            if body.get('source') not in ('practice', 'field') or self.game.state in ACTIVE:
+                raise ValueError('Stop the current game before changing source')
+            self.source = body['source']
+        elif action == 'prepare': self.game.prepare(body)
+        elif action == 'start': self.game.start(body.get('layout_id'), body.get('confirmed', False))
+        elif action == 'stop': self.game.stop()
+        else: raise ValueError('Unknown practice action')
+        return self.status()
+
+
+PRACTICE = FakePractice()
+
+
 class H(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *a, **k):
         super().__init__(*a, directory=WEB, **k)
@@ -75,6 +112,8 @@ class H(http.server.SimpleHTTPRequestHandler):
         p = p[5:]
         if p == 'config':
             return self.send_json({'rosbridge_port': 9, 'video_port': 9, 'foxglove_port': 9})
+        if p == 'practice/status':
+            return self.send_json(PRACTICE.status())
         if p == 'status':
             return self.send_json({'profiles': PROFILES, 'estop': False, 'time': time.time(), 'topics': {}, 'nodes': [],
                                    'system': {'cpu_percent': 5, 'load': [0, 0, 0], 'temp_c': 40,
@@ -116,6 +155,10 @@ class H(http.server.SimpleHTTPRequestHandler):
         n = int(self.headers.get('Content-Length') or 0)
         body = json.loads(self.rfile.read(n) or b'{}')
         try:
+            if self.path.startswith('/api/practice/'):
+                if not isinstance(body, dict):
+                    raise ValueError('Expected JSON object')
+                return self.send_json(PRACTICE.api(self.path.rsplit('/', 1)[-1], body))
             if self.path == '/api/map/nudge':
                 return self.send_json(STORE.nudge(body.get('name', ''), body.get('dx', 0), body.get('dy', 0), body.get('dyaw_deg', 0)))
             if self.path == '/api/map/clean':

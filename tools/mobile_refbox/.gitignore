@@ -1,0 +1,8 @@
+*.log
+results/stop-dev-*/
+results/rearm-final/
+results/*/refbox/
+results/*/*.log
+results/*/commands.json
+results/*/true_pose.json
+results/*/states.json

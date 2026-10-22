@@ -52,7 +52,7 @@ profiles:
     title: "Challenge: Navigation"
     description: Refbox bridge + MPS boxes + navigation challenge program (start a Navigation profile and set the start pose first)
     # REFBOX_BRIDGE_ADDRESS = the MQTT broker (refbox bridge, or refbox_lite on the PC); ROBOT_IP = this robot
-    command: bash -c 'export REFBOX_BRIDGE_ADDRESS={refbox_address} ROBOT_IP=$(hostname -I | cut -d" " -f1); ros2 run ired_refbox mqtt_refbox & exec ros2 launch ired_challenge navigation_challenge.launch.py'
+    command: bash -c 'export REFBOX_BRIDGE_ADDRESS={game_refbox_address} ROBOT_IP={game_robot_topic}; ros2 run ired_refbox mqtt_refbox & exec ros2 launch ired_challenge navigation_challenge.launch.py practice_watchdog:={practice_watchdog}'
     requires: [robot]
   record:
     title: Record (rosbag)
@@ -72,3 +72,9 @@ profiles:
     command: ros2 launch ired_navigation navigation.launch.xml map_name:={map_name}.yaml param_name:=navigation_softstop.yaml
     requires: [robot]
     conflicts: [mapping, mapping_odom, navigation, navigation_omni]
+
+  practice_broker:
+    title: Practice MQTT broker
+    description: Loopback-only broker for phone-controlled practice games
+    command: mosquitto -c {practice_broker_config}
+    hidden: true

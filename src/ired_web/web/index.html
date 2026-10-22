@@ -140,11 +140,44 @@
 
     <!-- TEST -->
     <section class="page" id="page-game" hidden>
+      <div class="card refbox-panel">
+        <h2>Refbox</h2>
+        <div class="refbox-row">
+          <label for="refbox-source">Game source</label>
+          <select id="refbox-source"><option value="field">Field refbox</option><option value="practice">Practice on this robot</option></select>
+          <button class="btn" id="refbox-connect">Use selected source</button>
+        </div>
+        <p class="small" id="refbox-connection" role="status">Loading game controls…</p>
+        <p class="small muted">Practice works from this phone without a PC. Field mode keeps the competition refbox connection.</p>
+        <div class="refbox-settings">
+          <label>Boxes<select id="refbox-boxes" aria-label="Boxes"><option value="2">2 boxes</option><option value="3">3 boxes</option><option value="4">4 boxes</option></select></label>
+          <label>Game duration<select id="refbox-duration" aria-label="Game duration"><option value="300">5 minutes</option><option value="600" selected>10 minutes</option><option value="900">15 minutes</option><option value="1200">20 minutes</option></select></label>
+          <label>Countdown<select id="refbox-countdown" aria-label="Countdown"><option value="3">3 seconds</option><option value="5" selected>5 seconds</option><option value="10">10 seconds</option></select></label>
+          <label>Seed (optional)<input id="refbox-seed" type="number" inputmode="numeric" min="0" max="2147483647" step="1" placeholder="Random"></label>
+        </div>
+        <div class="refbox-row">
+          <button class="btn" id="refbox-generate">Generate field</button>
+          <select id="refbox-saved" aria-label="Saved layout"><option value="">Saved layouts…</option></select>
+          <button class="btn" id="refbox-load">Load layout</button>
+        </div>
+        <p class="small muted">Preparing or loading a field never starts the robot. Place each 20 × 20 cm box at its zone centre; rotation points toward its input side (0° = +x, 90° = +y).</p>
+        <div id="refbox-layout"></div>
+        <button class="btn" id="refbox-save" hidden>Save field changes</button>
+        <p class="small" id="refbox-route"></p>
+        <label class="refbox-confirm"><input type="checkbox" id="refbox-confirm"> Boxes match this field; robot is at C_Z51 facing C_Z41, with its start pose set.</label>
+        <div class="refbox-row">
+          <button class="btn primary" id="refbox-start" disabled>Start game — robot will move</button>
+          <button class="btn danger" id="refbox-stop" disabled>Stop game</button>
+        </div>
+        <p class="small" id="refbox-readiness"></p>
+        <p class="small" id="refbox-message" role="status" aria-live="polite"></p>
+        <details><summary>Game history</summary><div id="refbox-history"></div></details>
+      </div>
       <div class="card">
         <h2>Navigation game <span class="muted small" id="game-state"></span></h2>
         <div class="game-stats">
           <div><span class="big" id="game-count">–/12</span><span class="muted small">zones counted</span></div>
-          <div><span class="big" id="game-time">–:––</span><span class="muted small">left of 10:00</span></div>
+          <div><span class="big" id="game-time">–:––</span><span class="muted small" id="game-duration-label">left of 10:00</span></div>
           <div><span class="big" id="game-retries">–</span><span class="muted small">retries</span></div>
         </div>
         <canvas id="game-canvas" aria-label="Field with the zones of the game"></canvas>
@@ -245,5 +278,6 @@
 
   <script src="vendor/roslib.min.js"></script>
   <script src="app.js"></script>
+<script src="game.js"></script>
 </body>
 </html>
