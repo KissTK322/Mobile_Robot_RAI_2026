@@ -27,6 +27,7 @@ navigation_challenge:
     grid_tries: 1            # tries per zone on the grid route before Nav2 plans
     stuck_time: 8.0          # s without moving stuck_dist -> retry, long before drive_timeout
     stuck_dist: 0.10
+    route_legs: true         # send lanes/grid routes one straight piece at a time (sim: no stalls)
 
 mps_obstacles:
   ros__parameters:

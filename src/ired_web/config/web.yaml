@@ -10,6 +10,7 @@ video_port: 8081       # camera MJPEG stream (web_video_server)
 foxglove_port: 8765    # Foxglove Studio:  ws://robotg5.local:8765
 log_dir: ~/.ros/ired_web
 maps_dir: ~/ired_ws/src/ired_navigation/maps   # Map page saves maps here
+refbox_address: 172.16.1.4   # MQTT broker of the refbox bridge (or refbox_lite on the PC); change on the day
 
 # Startable groups of nodes. {name} fields are filled from the settings above.
 # requires: started first if not running; conflicts: stopped first.
@@ -41,6 +42,12 @@ profiles:
     command: ros2 launch ired_navigation navigation.launch.xml map_name:={map_name}.yaml
     requires: [robot]
     conflicts: [mapping, navigation_omni, navigation_softstop]
+  challenge_nav:
+    title: "Challenge: Navigation"
+    description: Refbox bridge + MPS boxes + navigation challenge program (start a Navigation profile and set the start pose first)
+    # REFBOX_BRIDGE_ADDRESS = the MQTT broker (refbox bridge, or refbox_lite on the PC); ROBOT_IP = this robot
+    command: bash -c 'export REFBOX_BRIDGE_ADDRESS={refbox_address} ROBOT_IP=$(hostname -I | cut -d" " -f1); ros2 run ired_refbox mqtt_refbox & exec ros2 launch ired_challenge navigation_challenge.launch.py'
+    requires: [robot]
   record:
     title: Record (rosbag)
     description: Records driving data to ~/bags while Navigation runs (for finding why the robot stalls)
