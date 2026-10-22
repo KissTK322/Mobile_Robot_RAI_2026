@@ -23,6 +23,11 @@ def field_map():
             img[rc(w, t)] = OCC
     for x in np.arange(5.1, 5.9, RES / 2):            # laser ray outside the field
         img[rc(x, 2.5)] = FREE
+    for y in np.arange(1.0, 2.0, RES / 2):           # wall bent 25 cm outward, joined to the wall
+        img[rc(5.25, y)] = OCC
+    for x in np.arange(5.0, 5.25, RES / 2):
+        img[rc(x, 1.0)] = OCC
+    img[rc(5.6, 4.0)] = OCC                          # blob 60 cm outside: not a wall
     img[rc(2.5, 2.5)] = OCC                          # speck in the middle
     img[rc(1.5, 3.5)] = UNKNOWN                      # hole
     img[rc(1.55, 3.5)] = UNKNOWN
@@ -32,13 +37,15 @@ def field_map():
 def test_clean_removes_outside_specks_and_holes_keeps_walls():
     img, rc = field_map()
     out, rep = clean(img, RES, (-1.0, -1.0, 0.0), META, hint=(0.0, 0.0, 0.0))
-    assert rep['field'] == 'walls fitted'
+    assert rep['field'].startswith('walls fitted')
     assert out[rc(5.5, 2.5)] == UNKNOWN              # ray gone
     assert out[rc(2.5, 2.5)] == FREE                 # speck gone
     assert out[rc(1.5, 3.5)] == FREE                 # hole filled
     walls = img == OCC
     walls[rc(2.5, 2.5)] = False
-    assert (out[walls] == OCC).all()                 # every wall cell kept
+    walls[rc(5.6, 4.0)] = False
+    assert (out[walls] == OCC).all()                 # every wall cell kept, bent part too
+    assert out[rc(5.6, 4.0)] == UNKNOWN
     assert rep['speck_cells_removed'] == 1 and rep['hole_cells_filled'] == len({rc(1.5, 3.5), rc(1.55, 3.5)})
 
 

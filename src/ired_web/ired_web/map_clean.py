@@ -3,8 +3,10 @@
 What it does, in this order:
 1. Outside the field: the LiDAR sees through gaps and over low walls, so a SLAM map has
    rays and blobs far outside the 5 x 5 m field. The field is found with field_align
-   (the same wall fit the Align button uses); every cell more than `margin` outside the
-   field square, and every free cell more than `free_margin` outside it, is set to unknown. If the walls cannot be fitted, the largest free area
+   (the same wall fit the Align button uses, with the measured field size); free cells more
+   than `free_margin` outside the fitted wall lines become unknown, wall cells are kept out to
+   `wall_reach` when their wall group comes within `margin` of the line (bent walls), and
+   everything else outside becomes unknown. If the walls cannot be fitted, the largest free area
    (grown by `margin`) is kept instead.
 2. Specks: small groups of occupied cells inside the field that do not touch the field
    walls (people walking by, noise) become free.
@@ -46,6 +48,7 @@ def field_mask(shape, res, origin, fit, margin):
 
 
 def clean(img, res, origin, meta, hint=field_align.HINT_CARTOGRAPHER, margin=0.20, free_margin=0.05,
+          wall_reach=0.50,
           speck_cells=6, hole_m2=0.25, wall_band=0.25):
     """Return (clean image, report dict). img: uint8 rows top-down."""
     occ, _ = field_align.classes(img, meta)
@@ -60,22 +63,35 @@ def clean(img, res, origin, meta, hint=field_align.HINT_CARTOGRAPHER, margin=0.2
     # 1. outside the field
     try:
         fit = field_align.align(img, res, origin, meta, hint)
-        inside, fx, fy = field_mask(img.shape, res, origin, fit, margin)
-        size = field_align.FIELD
-        # distance (m) of each cell from the field edge, inside the square
-        edge = np.minimum.reduce([fx, size - fx, fy, size - fy])
-        report['field'] = 'walls fitted'
+        _, fx, fy = field_mask(img.shape, res, origin, fit, margin)
+        # distance (m) of each cell from the fitted wall lines (positive inside): the field
+        # is centred on (2.5, 2.5) with the measured size, not exactly 5 x 5 m
+        c = field_align.FIELD / 2
+        hx, hy = fit['size'][0] / 2, fit['size'][1] / 2
+        edge = np.minimum.reduce([fx - (c - hx), (c + hx) - fx, fy - (c - hy), (c + hy) - fy])
+        inside = edge > -wall_reach
+        report['field'] = f'walls fitted ({fit["size"][0]:.2f} x {fit["size"][1]:.2f} m)'
     except ValueError as e:
         lab, n = ndimage.label(free, EIGHT)
         if n == 0:
             raise ValueError('no free space in the map')
         biggest = 1 + int(np.argmax(ndimage.sum(free, lab, range(1, n + 1))))
-        inside = ndimage.binary_dilation(lab == biggest, EIGHT, iterations=max(1, int(margin / res)))
-        edge = ndimage.distance_transform_edt(inside) * res - margin
+        inside = ndimage.binary_dilation(lab == biggest, EIGHT, iterations=max(1, int(wall_reach / res)))
+        edge = ndimage.distance_transform_edt(inside) * res - wall_reach
         report['field'] = f'largest free area (walls not fitted: {e})'
     # free space cannot lie beyond the wall line: free cells more than free_margin outside
     # the field go too (wall cells are kept up to margin, the wall band is ~10-15 cm)
-    beyond = ~inside | ((out == FREE) & (edge < -free_margin))
+    # bent walls stick out of the fitted lines (up to ~10-15 cm seen): wall cells out to
+    # wall_reach are kept when their wall group reaches within `margin` of the line
+    occ_near = (out == OCC) & inside
+    lab, n = ndimage.label(occ_near, EIGHT)
+    keep_wall = np.zeros_like(occ_near)
+    if n:
+        reach = ndimage.maximum(edge, lab, range(1, n + 1))       # closest-to-field cell of each group
+        ok = np.zeros(n + 1, bool)
+        ok[1:] = np.asarray(reach) > -margin
+        keep_wall = ok[lab] & occ_near
+    beyond = ~inside | ((out == FREE) & (edge < -free_margin)) | ((out == OCC) & ~keep_wall)
     report['outside_cleared'] = int((beyond & (out != UNKNOWN)).sum())
     out[beyond] = UNKNOWN
 
