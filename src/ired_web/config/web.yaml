@@ -33,14 +33,14 @@ profiles:
     description: Cartographer, build a new map while driving
     command: ros2 launch ired_navigation slam.launch.xml
     requires: [robot]
-    conflicts: [navigation, navigation_omni]
+    conflicts: [navigation, navigation_omni, navigation_softstop]
   navigation:
     title: Navigation
     description: Nav2 with the saved map and AMCL
     # {map_name}: the map chosen on the Map page (maps_dir), default map
     command: ros2 launch ired_navigation navigation.launch.xml map_name:={map_name}.yaml
     requires: [robot]
-    conflicts: [mapping, navigation_omni]
+    conflicts: [mapping, navigation_omni, navigation_softstop]
   record:
     title: Record (rosbag)
     description: Records driving data to ~/bags while Navigation runs (for finding why the robot stalls)
@@ -52,4 +52,10 @@ profiles:
     description: Nav2 tuned for the omni base (sideways, soft start/stop, real robot size)
     command: ros2 launch ired_navigation navigation.launch.xml map_name:={map_name}.yaml param_name:=navigation_omni.yaml
     requires: [robot]
-    conflicts: [mapping, navigation]
+    conflicts: [mapping, navigation, navigation_softstop]
+  navigation_softstop:
+    title: Navigation (soft-stop)
+    description: Navigation (omni) with gentle 0.18 m/s^2 starts/stops and wall slowdown only when moving toward it (test)
+    command: ros2 launch ired_navigation navigation.launch.xml map_name:={map_name}.yaml param_name:=navigation_softstop.yaml
+    requires: [robot]
+    conflicts: [mapping, navigation, navigation_omni]

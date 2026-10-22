@@ -323,9 +323,9 @@ function profileState(name) {
   return p ? p.state : 'stopped';
 }
 
-// Nav2 runs from either profile: Navigation (seniors' config) or Navigation (omni)
+// Nav2 runs from any Navigation profile (seniors' config, omni, soft-stop, ...)
 function navRunning() {
-  return profileState('navigation') === 'running' || profileState('navigation_omni') === 'running';
+  return !!(S.status && S.status.profiles.some((p) => p.name.startsWith('navigation') && p.state === 'running'));
 }
 
 function renderDriveWarn() {
