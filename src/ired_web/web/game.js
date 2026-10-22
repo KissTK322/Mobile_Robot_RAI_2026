@@ -13,7 +13,7 @@ async function rbAction(action, body) {
   PRACTICE.pending = true; renderRefbox(); rb('message').textContent = 'Working…';
   try {
     PRACTICE.info = await api('practice/' + action, { method: 'POST', body });
-    PRACTICE.dirty = false;
+    if (action === 'source') rb('confirm').checked = false;
     rb('message').textContent = action === 'source' ? 'Switching connection…' : PRACTICE.info.message;
     renderRefbox(); renderGame();
   } catch (e) { rbError(e); }
