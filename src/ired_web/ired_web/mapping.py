@@ -26,7 +26,7 @@ from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from rclpy.serialization import deserialize_message
 from tf2_msgs.msg import TFMessage
 
-from ired_web import field_align
+from ired_web import field_align, map_clean
 
 NAME_RE = re.compile(r'^[A-Za-z0-9_-]{1,40}$')
 
@@ -267,6 +267,33 @@ class MapStore:
         self.link_into_share(out)
         fit.update({'name': out, 'from': name, 'start': start})
         return fit
+
+    def clean(self, name, start='auto'):
+        """Write <name>-clean (map_clean: outside the field, specks, holes). The original
+        is not touched. start as in align(): which way the map frame lies, for the wall fit."""
+        if not any(m['name'] == name for m in self.list()):
+            raise ValueError(f'No map called {name}')
+        hints = {'c_z51': field_align.HINT_CARTOGRAPHER, 'aligned': (0.0, 0.0, 0.0)}
+        first = 'aligned' if re.search(r'field|aligned', name, re.I) else 'c_z51'
+        order = [first, 'c_z51' if first == 'aligned' else 'aligned'] if start == 'auto' else [start]
+        if any(o not in hints for o in order):
+            raise ValueError('start must be auto, c_z51 or aligned')
+        out = self.unique_name(re.sub(r'-clean(-\d+)?$', '', name, flags=re.I) + '-clean')
+        src = os.path.join(self.src_dir, name + '.yaml')
+        rep = None
+        for o in order:              # the hint whose wall fit works; else the largest free area
+            img, res, origin, meta = field_align.load_map(src)
+            try:
+                field_align.align(img, res, origin, meta, hints[o])
+            except ValueError:
+                continue
+            rep = map_clean.clean_file(src, self.src_dir, out, hints[o])
+            break
+        if rep is None:
+            rep = map_clean.clean_file(src, self.src_dir, out, hints[order[0]])
+        self.link_into_share(out)
+        rep.update({'name': out, 'from': name})
+        return rep
 
     def preview_png(self, name, scale=3):
         """Saved map as PNG with the 5 x 5 m zone grid drawn where the map frame puts it."""

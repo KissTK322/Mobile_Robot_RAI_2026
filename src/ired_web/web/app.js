@@ -587,7 +587,9 @@ function renderMap() {
     view.onclick = () => showMapPreview(m.name, `${m.name}: blue = 5 x 5 m zone grid, red + = zone centres.`);
     const al = document.createElement('button'); al.className = 'btn'; al.textContent = 'Align';
     al.onclick = () => alignMap(m.name, al);
-    row.append(view, al);
+    const cl = document.createElement('button'); cl.className = 'btn'; cl.textContent = 'Clean';
+    cl.onclick = () => cleanMap(m.name, cl);
+    row.append(view, al, cl);
     if (m.active) {
       const b = document.createElement('span'); b.className = 'badge'; b.textContent = 'in use'; row.append(b);
     } else {
@@ -612,6 +614,22 @@ async function showMapPreview(name, text) {
   $('#map-preview-text').textContent = text;
   $('#map-preview').hidden = false;
   $('#map-preview').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+async function cleanMap(name, btn) {
+  btn.disabled = true;
+  $('#map-msg').textContent = `Cleaning ${name}...`;
+  try {
+    const r = await api('map/clean', { method: 'POST', body: { name } });
+    $('#map-msg').textContent = `Saved ${r.name}: ${r.outside_cleared} cells outside the field cleared, ` +
+      `${r.speck_cells_removed} speck cells removed, ${r.hole_cells_filled} hole cells filled. ` +
+      'Check the picture (walls must still be there). Not aligned yet? Press Align on the clean copy, then "Use for Navigation".';
+    pollMap(true);
+    showMapPreview(r.name, `${r.name} (cleaned copy of ${r.from}, original unchanged; field: ${r.field}).`);
+  } catch (e) {
+    $('#map-msg').textContent = 'Clean failed: ' + String(e.message || e).replace(/^http \d+: /, '');
+  }
+  btn.disabled = false;
 }
 
 async function alignMap(name, btn) {

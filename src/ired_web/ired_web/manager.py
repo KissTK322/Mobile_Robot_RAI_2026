@@ -603,6 +603,12 @@ def make_handler(manager):
                 except (ValueError, OSError) as e:
                     return self.send_json(400, {'error': str(e)})
                 return self.send_json(200, out)
+            if method == 'POST' and parts == ['map', 'clean']:
+                try:
+                    out = manager.maps.clean(str(self.body_json().get('name', '')).strip())
+                except (ValueError, OSError) as e:
+                    return self.send_json(400, {'error': str(e)})
+                return self.send_json(200, out)
             if method == 'POST' and parts == ['map', 'align']:
                 body = self.body_json()
                 try:
