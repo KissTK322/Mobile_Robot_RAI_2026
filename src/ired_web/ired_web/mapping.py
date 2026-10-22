@@ -295,33 +295,44 @@ class MapStore:
         rep.update({'name': out, 'from': name})
         return rep
 
-    def nudge(self, name, dx, dy):
-        """Write <name>-adj: the same image with the origin moved by (dx, dy) m, i.e. the map
-        shifted by (dx, dy) under the zone grid (fine correction after Align). Original kept."""
+    @staticmethod
+    def _nudge_image(img, res, origin, dx, dy, dyaw_deg):
+        """Rotate about field centre, then translate in field axes (metres)."""
+        dx, dy, dyaw_deg = float(dx), float(dy), float(dyaw_deg)
+        if not all(math.isfinite(v) for v in (dx, dy, dyaw_deg)):
+            raise ValueError('Adjustment must be finite')
+        if abs(dx) > 0.5 or abs(dy) > 0.5 or abs(dyaw_deg) > 10:
+            raise ValueError('Shift at most 0.5 m and rotate at most 10 degrees; use Align for bigger corrections')
+        if not dyaw_deg and not origin[2]:
+            return img, (round(origin[0] + dx, 4), round(origin[1] + dy, 4), 0.0)
+        yaw = math.radians(dyaw_deg)
+        centre = np.array([[2.5, 2.5]])
+        t = centre[0] - field_align.rot(centre, yaw)[0] + np.array([dx, dy])
+        # resample expects image axes with yaw zero. Include a nonzero YAML yaw
+        # by rotating about the image origin before the field-centre adjustment.
+        base = np.array([origin[:2]])
+        t += field_align.rot(base, yaw)[0] - field_align.rot(base, yaw + origin[2])[0]
+        adjusted, adjusted_origin = field_align.resample(img, res, origin, yaw + origin[2], t)
+        # Match YAML precision before rendering, including floating-point crop bounds.
+        return adjusted, tuple(round(v, 4) for v in adjusted_origin)
+
+    def nudge(self, name, dx, dy, dyaw_deg=0.0):
+        """Save one adjusted copy: rotate about (2.5, 2.5), then shift. Keep original."""
         if not any(m['name'] == name for m in self.list()):
             raise ValueError(f'No map called {name}')
-        dx, dy = float(dx), float(dy)
-        if abs(dx) > 0.5 or abs(dy) > 0.5:
-            raise ValueError('Shift at most 0.5 m; use Align for bigger corrections')
-        with open(os.path.join(self.src_dir, name + '.yaml')) as f:
-            meta = yaml.safe_load(f)
+        img, res, origin, meta = field_align.load_map(os.path.join(self.src_dir, name + '.yaml'))
+        img, origin = self._nudge_image(img, res, origin, dx, dy, dyaw_deg)
         out = self.unique_name(re.sub(r'-adj(-\d+)?$', '', name, flags=re.I) + '-adj')
-        img = Image.open(os.path.join(self.src_dir, meta['image']))
-        img.save(os.path.join(self.src_dir, out + '.pgm'))
-        o = meta['origin']
-        meta.update(image=out + '.pgm', origin=[round(o[0] + dx, 4), round(o[1] + dy, 4), o[2] if len(o) > 2 else 0.0])
-        with open(os.path.join(self.src_dir, out + '.yaml'), 'w') as f:
-            yaml.safe_dump(meta, f, default_flow_style=None, sort_keys=False)
+        field_align.save_map(img, res, origin, self.src_dir, out, meta)
         self.link_into_share(out)
-        return {'name': out, 'from': name, 'dx': dx, 'dy': dy}
+        return {'name': out, 'from': name, 'dx': float(dx), 'dy': float(dy), 'dyaw_deg': float(dyaw_deg)}
 
-    def preview_png(self, name, scale=3, dx=0.0, dy=0.0):
-        """Saved map as PNG with the 5 x 5 m zone grid drawn where the map frame puts it;
-        dx, dy preview a nudge (map shifted under the grid)."""
+    def preview_png(self, name, scale=3, dx=0.0, dy=0.0, dyaw_deg=0.0):
+        """Adjusted map preview with fixed field grid and START fence reference."""
         if not any(m['name'] == name for m in self.list()):
             raise ValueError(f'No map called {name}')
         img, res, origin, _ = field_align.load_map(os.path.join(self.src_dir, name + '.yaml'))
-        origin = (origin[0] + float(dx), origin[1] + float(dy), origin[2])
+        img, origin = self._nudge_image(img, res, origin, dx, dy, dyaw_deg)
         h, w = img.shape
         im = Image.fromarray(img, mode='L').convert('RGB').resize((w * scale, h * scale), Image.NEAREST)
         d = ImageDraw.Draw(im)
@@ -337,6 +348,10 @@ class MapStore:
                 x, y = px(a - 0.5, b - 0.5)
                 d.line([(x - 4, y), (x + 4, y)], fill=(198, 40, 40))
                 d.line([(x, y - 4), (x, y + 4)], fill=(198, 40, 40))
+        # Fixed reference, never written into the occupancy map.
+        fence_colour = (225, 95, 0)
+        d.line([px(2, 0), px(2, 1), px(5, 1)], fill=fence_colour, width=3)
+        d.text(px(2.1, 0.75), 'START fence (x=2, y=1)', fill=fence_colour)
         # show the field with 1 m around it, not the whole SLAM area
         (x0, y1), (x1, y0) = px(-1, 6), px(6, -1)
         box = (max(0, int(x0)), max(0, int(y1)), min(im.width, int(x1)), min(im.height, int(y0)))

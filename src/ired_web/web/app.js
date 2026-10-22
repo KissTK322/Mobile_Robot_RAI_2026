@@ -586,7 +586,7 @@ function renderMap() {
     when.textContent = new Date(m.time * 1000).toLocaleString();
     row.append(name, when);
     const view = document.createElement('button'); view.className = 'btn'; view.textContent = 'View';
-    view.onclick = () => showMapPreview(m.name, `${m.name}: blue = 5 x 5 m zone grid, red + = zone centres.`);
+    view.onclick = () => showMapPreview(m.name, `${m.name}: blue = 5 x 5 m zone grid, red + = zone centres, orange = START fence.`);
     const al = document.createElement('button'); al.className = 'btn'; al.textContent = 'Align';
     al.onclick = () => alignMap(m.name, al);
     const cl = document.createElement('button'); cl.className = 'btn'; cl.textContent = 'Clean';
@@ -607,11 +607,11 @@ function renderMap() {
 
 function navMsg(t) { $('#nav-msg').textContent = t; }
 
-// fine shift of a saved map under the zone grid (after Align): preview, then save as <name>-adj
-const NUDGE = { name: null, dx: 0, dy: 0 };
+// Fine shift and rotation under the fixed field grid; save one adjusted copy.
+const NUDGE = { name: null, dx: 0, dy: 0, dyaw_deg: 0 };
 function nudgeShow() {
-  $('#nudge-val').textContent = `${Math.round(NUDGE.dx * 100)}, ${Math.round(NUDGE.dy * 100)} cm`;
-  $('#nudge-save').disabled = !(NUDGE.dx || NUDGE.dy);
+  $('#nudge-val').textContent = `${Math.round(NUDGE.dx * 100)}, ${Math.round(NUDGE.dy * 100)} cm; ${NUDGE.dyaw_deg.toFixed(1)}°`;
+  $('#nudge-save').disabled = !(NUDGE.dx || NUDGE.dy || NUDGE.dyaw_deg);
 }
 document.querySelectorAll('[data-nudge]').forEach((b) => {
   b.onclick = () => {
@@ -623,26 +623,41 @@ document.querySelectorAll('[data-nudge]').forEach((b) => {
     showMapPreview(NUDGE.name, $('#map-preview-text').textContent, true);
   };
 });
-$('#nudge-reset').onclick = () => { NUDGE.dx = NUDGE.dy = 0; nudgeShow(); if (NUDGE.name) showMapPreview(NUDGE.name, $('#map-preview-text').textContent, true); };
+document.querySelectorAll('[data-rotate]').forEach((b) => {
+  b.onclick = () => {
+    if (!NUDGE.name) return;
+    const angle = Math.round((NUDGE.dyaw_deg + Number(b.dataset.rotate) * Number($('#nudge-angle').value)) * 10) / 10;
+    if (Math.abs(angle) > 10) { $('#map-msg').textContent = 'Rotate at most 10°; use Align for bigger corrections.'; return; }
+    NUDGE.dyaw_deg = angle;
+    nudgeShow();
+    showMapPreview(NUDGE.name, $('#map-preview-text').textContent, true);
+  };
+});
+$('#nudge-reset').onclick = () => { NUDGE.dx = NUDGE.dy = NUDGE.dyaw_deg = 0; nudgeShow(); if (NUDGE.name) showMapPreview(NUDGE.name, $('#map-preview-text').textContent, true); };
 $('#nudge-save').onclick = async () => {
   try {
-    const r = await api('map/nudge', { method: 'POST', body: { name: NUDGE.name, dx: NUDGE.dx, dy: NUDGE.dy } });
-    $('#map-msg').textContent = `Saved ${r.name} (${r.from} shifted ${Math.round(r.dx * 100)}, ${Math.round(r.dy * 100)} cm). Use it for Navigation when it looks right.`;
+    const r = await api('map/nudge', { method: 'POST', body: { name: NUDGE.name, dx: NUDGE.dx, dy: NUDGE.dy, dyaw_deg: NUDGE.dyaw_deg } });
+    $('#map-msg').textContent = `Saved ${r.name} (${r.from} adjusted ${Math.round(r.dx * 100)}, ${Math.round(r.dy * 100)} cm; ${r.dyaw_deg.toFixed(1)}°). Use it for Navigation when it looks right.`;
     pollMap(true);
-    showMapPreview(r.name, `${r.name}: shifted copy of ${r.from}.`);
+    showMapPreview(r.name, `${r.name}: adjusted copy of ${r.from}.`);
   } catch (e) {
     $('#map-msg').textContent = 'Not saved: ' + String(e.message || e).replace(/^http \d+: /, '');
   }
 };
 
+let mapPreviewRequest = 0;
 async function showMapPreview(name, text, keepNudge) {
-  if (!keepNudge || NUDGE.name !== name) { NUDGE.name = name; NUDGE.dx = NUDGE.dy = 0; nudgeShow(); }
-  const q = `name=${encodeURIComponent(name)}&dx=${NUDGE.dx}&dy=${NUDGE.dy}`;
+  const request = ++mapPreviewRequest;
+  if (!keepNudge || NUDGE.name !== name) { NUDGE.name = name; NUDGE.dx = NUDGE.dy = NUDGE.dyaw_deg = 0; nudgeShow(); }
+  const q = `name=${encodeURIComponent(name)}&dx=${NUDGE.dx}&dy=${NUDGE.dy}&dyaw_deg=${NUDGE.dyaw_deg}`;
   const res = await fetch('/api/map/preview?' + q, { headers: { 'X-Pin': S.pin } });
+  if (request !== mapPreviewRequest) return;
   if (!res.ok) { $('#map-msg').textContent = 'Could not load that map.'; return; }
   const img = $('#map-preview-img');
+  const blob = await res.blob();
+  if (request !== mapPreviewRequest) return;
   if (img.src) URL.revokeObjectURL(img.src);
-  img.src = URL.createObjectURL(await res.blob());
+  img.src = URL.createObjectURL(blob);
   $('#map-preview-text').textContent = text;
   $('#map-preview').hidden = false;
   $('#map-preview').scrollIntoView({ behavior: 'smooth', block: 'nearest' });

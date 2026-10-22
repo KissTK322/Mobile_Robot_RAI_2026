@@ -1,0 +1,15 @@
+{
+  "http_save": {
+    "name": "Titan-1-cleaned-field-adj",
+    "from": "Titan-1-cleaned-field",
+    "dx": 0.02,
+    "dy": -0.01,
+    "dyaw_deg": -0.5
+  },
+  "preview_saved_identical": true,
+  "single_adj_copy": true,
+  "pc_preview_30_calls_cpu_ms_median": 7.967223500000009,
+  "pc_preview_wall_ms_median": 8.475242499116575,
+  "pc_preview_wall_ms_max": 25.679285998194246,
+  "pi_tested": false
+}
