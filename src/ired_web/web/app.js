@@ -607,8 +607,38 @@ function renderMap() {
 
 function navMsg(t) { $('#nav-msg').textContent = t; }
 
-async function showMapPreview(name, text) {
-  const res = await fetch('/api/map/preview?name=' + encodeURIComponent(name), { headers: { 'X-Pin': S.pin } });
+// fine shift of a saved map under the zone grid (after Align): preview, then save as <name>-adj
+const NUDGE = { name: null, dx: 0, dy: 0 };
+function nudgeShow() {
+  $('#nudge-val').textContent = `${Math.round(NUDGE.dx * 100)}, ${Math.round(NUDGE.dy * 100)} cm`;
+  $('#nudge-save').disabled = !(NUDGE.dx || NUDGE.dy);
+}
+document.querySelectorAll('[data-nudge]').forEach((b) => {
+  b.onclick = () => {
+    if (!NUDGE.name) return;
+    const [sx, sy] = b.dataset.nudge.split(',').map(Number), step = Number($('#nudge-step').value);
+    NUDGE.dx = Math.round((NUDGE.dx + sx * step) * 100) / 100;
+    NUDGE.dy = Math.round((NUDGE.dy + sy * step) * 100) / 100;
+    nudgeShow();
+    showMapPreview(NUDGE.name, $('#map-preview-text').textContent, true);
+  };
+});
+$('#nudge-reset').onclick = () => { NUDGE.dx = NUDGE.dy = 0; nudgeShow(); if (NUDGE.name) showMapPreview(NUDGE.name, $('#map-preview-text').textContent, true); };
+$('#nudge-save').onclick = async () => {
+  try {
+    const r = await api('map/nudge', { method: 'POST', body: { name: NUDGE.name, dx: NUDGE.dx, dy: NUDGE.dy } });
+    $('#map-msg').textContent = `Saved ${r.name} (${r.from} shifted ${Math.round(r.dx * 100)}, ${Math.round(r.dy * 100)} cm). Use it for Navigation when it looks right.`;
+    pollMap(true);
+    showMapPreview(r.name, `${r.name}: shifted copy of ${r.from}.`);
+  } catch (e) {
+    $('#map-msg').textContent = 'Not saved: ' + String(e.message || e).replace(/^http \d+: /, '');
+  }
+};
+
+async function showMapPreview(name, text, keepNudge) {
+  if (!keepNudge || NUDGE.name !== name) { NUDGE.name = name; NUDGE.dx = NUDGE.dy = 0; nudgeShow(); }
+  const q = `name=${encodeURIComponent(name)}&dx=${NUDGE.dx}&dy=${NUDGE.dy}`;
+  const res = await fetch('/api/map/preview?' + q, { headers: { 'X-Pin': S.pin } });
   if (!res.ok) { $('#map-msg').textContent = 'Could not load that map.'; return; }
   const img = $('#map-preview-img');
   if (img.src) URL.revokeObjectURL(img.src);
@@ -641,8 +671,10 @@ async function alignMap(name, btn) {
     const r = await api('map/align', { method: 'POST', body: { name } });
     const walls = Object.entries(r.walls).map(([k, w]) =>
       `${k}: seen ${w.seen_m} m, off a straight line up to ${w.max_dev_cm} cm`).join('; ');
-    $('#map-msg').textContent = `Saved ${r.name}. Field measured ${r.size[0]} x ${r.size[1]} m. ` +
-      'Check the picture: walls on the outer blue square, then "Use for Navigation".';
+    const how = r.anchor === 'start fence' ? 'START fence put on the x = 2 / y = 1 zone lines'
+      : 'START fence not found, field centred between the walls';
+    $('#map-msg').textContent = `Saved ${r.name}. Field measured ${r.size[0]} x ${r.size[1]} m, ${how}. ` +
+      'Check the picture (fine shift below if needed), then "Use for Navigation".';
     pollMap(true);
     showMapPreview(r.name, `${r.name} (from ${r.from}). ${walls}.`);
   } catch (e) {

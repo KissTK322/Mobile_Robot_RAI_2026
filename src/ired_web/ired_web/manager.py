@@ -605,6 +605,13 @@ def make_handler(manager):
                 except (ValueError, OSError) as e:
                     return self.send_json(400, {'error': str(e)})
                 return self.send_json(200, out)
+            if method == 'POST' and parts == ['map', 'nudge']:
+                body = self.body_json()
+                try:
+                    out = manager.maps.nudge(str(body.get('name', '')).strip(), body.get('dx', 0), body.get('dy', 0))
+                except (ValueError, OSError, TypeError) as e:
+                    return self.send_json(400, {'error': str(e)})
+                return self.send_json(200, out)
             if method == 'POST' and parts == ['map', 'clean']:
                 try:
                     out = manager.maps.clean(str(self.body_json().get('name', '')).strip())
@@ -629,8 +636,10 @@ def make_handler(manager):
                     return self.send_json(400, {'error': str(e)})
                 return self.send_json(200, {'map': name, 'zones': z})
             if method == 'GET' and parts == ['map', 'preview']:
+                q = parse_qs(url.query)
                 try:
-                    png = manager.maps.preview_png(parse_qs(url.query).get('name', [''])[0])
+                    png = manager.maps.preview_png(q.get('name', [''])[0], dx=float(q.get('dx', ['0'])[0]),
+                                                   dy=float(q.get('dy', ['0'])[0]))
                 except (ValueError, OSError) as e:
                     return self.send_json(404, {'error': str(e)})
                 self.send_response(200)

@@ -295,11 +295,33 @@ class MapStore:
         rep.update({'name': out, 'from': name})
         return rep
 
-    def preview_png(self, name, scale=3):
-        """Saved map as PNG with the 5 x 5 m zone grid drawn where the map frame puts it."""
+    def nudge(self, name, dx, dy):
+        """Write <name>-adj: the same image with the origin moved by (dx, dy) m, i.e. the map
+        shifted by (dx, dy) under the zone grid (fine correction after Align). Original kept."""
+        if not any(m['name'] == name for m in self.list()):
+            raise ValueError(f'No map called {name}')
+        dx, dy = float(dx), float(dy)
+        if abs(dx) > 0.5 or abs(dy) > 0.5:
+            raise ValueError('Shift at most 0.5 m; use Align for bigger corrections')
+        with open(os.path.join(self.src_dir, name + '.yaml')) as f:
+            meta = yaml.safe_load(f)
+        out = self.unique_name(re.sub(r'-adj(-\d+)?$', '', name, flags=re.I) + '-adj')
+        img = Image.open(os.path.join(self.src_dir, meta['image']))
+        img.save(os.path.join(self.src_dir, out + '.pgm'))
+        o = meta['origin']
+        meta.update(image=out + '.pgm', origin=[round(o[0] + dx, 4), round(o[1] + dy, 4), o[2] if len(o) > 2 else 0.0])
+        with open(os.path.join(self.src_dir, out + '.yaml'), 'w') as f:
+            yaml.safe_dump(meta, f, default_flow_style=None, sort_keys=False)
+        self.link_into_share(out)
+        return {'name': out, 'from': name, 'dx': dx, 'dy': dy}
+
+    def preview_png(self, name, scale=3, dx=0.0, dy=0.0):
+        """Saved map as PNG with the 5 x 5 m zone grid drawn where the map frame puts it;
+        dx, dy preview a nudge (map shifted under the grid)."""
         if not any(m['name'] == name for m in self.list()):
             raise ValueError(f'No map called {name}')
         img, res, origin, _ = field_align.load_map(os.path.join(self.src_dir, name + '.yaml'))
+        origin = (origin[0] + float(dx), origin[1] + float(dy), origin[2])
         h, w = img.shape
         im = Image.fromarray(img, mode='L').convert('RGB').resize((w * scale, h * scale), Image.NEAREST)
         d = ImageDraw.Draw(im)

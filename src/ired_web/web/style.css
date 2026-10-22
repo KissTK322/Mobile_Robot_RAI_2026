@@ -198,3 +198,6 @@ a.btn { text-decoration: none; display: inline-block; }
 .game-stats > div { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px; border: 1px solid var(--line); border-radius: 8px; }
 .game-stats .big { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
 #game-canvas { display: block; margin: 0 auto; max-width: 100%; }
+.nudge-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
+.nudge-row .btn { min-width: 44px; min-height: 44px; }
+.nudge-row select { min-height: 44px; }

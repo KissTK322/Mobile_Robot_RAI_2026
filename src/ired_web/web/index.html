@@ -120,6 +120,17 @@
       <div id="map-preview" hidden>
         <p class="small" id="map-preview-text"></p>
         <img id="map-preview-img" alt="Saved map with the 5 x 5 m zone grid">
+        <div class="nudge-row">
+          <span class="small muted">Fine shift:</span>
+          <button class="btn" data-nudge="-1,0" aria-label="Move map left">←</button>
+          <button class="btn" data-nudge="1,0" aria-label="Move map right">→</button>
+          <button class="btn" data-nudge="0,1" aria-label="Move map up">↑</button>
+          <button class="btn" data-nudge="0,-1" aria-label="Move map down">↓</button>
+          <select id="nudge-step" aria-label="Step"><option value="0.01">1 cm</option><option value="0.02" selected>2 cm</option><option value="0.05">5 cm</option></select>
+          <span class="small" id="nudge-val">0, 0 cm</span>
+          <button class="btn" id="nudge-reset">Reset</button>
+          <button class="btn primary" id="nudge-save" disabled>Save shifted copy</button>
+        </div>
       </div>
     </section>
 
