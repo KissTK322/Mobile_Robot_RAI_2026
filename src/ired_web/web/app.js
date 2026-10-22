@@ -66,6 +66,7 @@ function connectRos() {
     S.goalPub = new ROSLIB.Topic({ ros, name: '/goal_pose', messageType: 'geometry_msgs/msg/PoseStamped' });
     S.initPub = new ROSLIB.Topic({ ros, name: '/initialpose', messageType: 'geometry_msgs/msg/PoseWithCovarianceStamped' });
     if (S.tab === 'camera') subscribeMarkers(true);
+    if (S.tab === 'game') subscribeGame(true);
     renderChips();
   });
   const lost = () => {
@@ -73,6 +74,7 @@ function connectRos() {
     S.rosOk = false;
     S.cmdPub = null;
     S.markerSub = null;
+    S.gameSub = null;
     renderChips();
     setTimeout(connectRos, 3000);
   };
@@ -807,6 +809,89 @@ $('#map-save').onclick = async () => {
 };
 window.addEventListener('resize', () => { if (S.tab === 'map') renderMap(); });
 
+/* ---------- game (navigation challenge) ---------- */
+// /challenge/navigation/state (JSON from navigation_node, 10 Hz) only while this page is open
+const GAME = { d: null, at: 0 };
+const ORANGE = ['C_Z13', 'C_Z35', 'C_Z52', 'C_Z54', 'C_Z55'];
+const START_ZONES = ['C_Z31', 'C_Z41', 'C_Z51'];
+
+function subscribeGame(on) {
+  if (on && S.ros && S.rosOk && !S.gameSub) {
+    S.gameSub = new ROSLIB.Topic({ ros: S.ros, name: '/challenge/navigation/state', messageType: 'std_msgs/msg/String', throttle_rate: 500 });
+    S.gameSub.subscribe((m) => {
+      try { GAME.d = JSON.parse(m.data); GAME.at = Date.now(); } catch (e) { return; }
+      renderGame();
+    });
+  } else if (!on && S.gameSub) {
+    S.gameSub.unsubscribe();
+    S.gameSub = null;
+  }
+}
+
+function renderGame() {
+  const d = GAME.d;
+  const fresh = d && Date.now() - GAME.at < 3000;
+  const visited = d ? (d.visited || []) : [];
+  const remaining = d && Array.isArray(d.remaining) ? d.remaining : null;
+  const total = remaining ? visited.length + remaining.length : 12;
+  $('#game-count').textContent = d ? `${remaining ? 12 - remaining.length : visited.length}/12` : '–/12';
+  if (d && d.game_s !== null && d.game_s !== undefined) {
+    const left = Math.max(0, 600 - d.game_s);
+    $('#game-time').textContent = `${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, '0')}`;
+  } else {
+    $('#game-time').textContent = '–:––';
+  }
+  $('#game-retries').textContent = d ? String(d.retries || 0) : '–';
+  $('#game-state').textContent = !d ? '' : !fresh ? '· no data (challenge stopped?)' : `· ${d.state}${d.target ? ' → ' + d.target : ''}`;
+  if (d && fresh) {
+    $('#game-msg').textContent = !d.game_on ? 'Waiting for the refbox to start the game…'
+      : remaining && remaining.length === 0 ? 'All zones counted.' : `Robot in ${d.zone_now || 'no zone'}` +
+        ((d.deferred || []).length ? ` · left for the end: ${d.deferred.join(', ')}` : '');
+  }
+  drawGame(d, remaining || [], visited, total);
+}
+
+function drawGame(d, remaining, visited) {
+  const cv = $('#game-canvas');
+  const w = cv.parentElement.clientWidth - 2, size = Math.min(w, Math.round(window.innerHeight * 0.62));
+  const dpr = window.devicePixelRatio || 1;
+  if (cv.width !== Math.round(size * dpr)) { cv.width = cv.height = Math.round(size * dpr); cv.style.width = cv.style.height = size + 'px'; }
+  const g = cv.getContext('2d'), k = cv.width / 5.4, o = 0.2 * k;
+  const X = (x) => o + x * k, Y = (y) => cv.height - o - y * k;
+  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim() || '#888';
+  g.clearRect(0, 0, cv.width, cv.height);
+  g.font = `${Math.round(11 * dpr)}px sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+  for (let a = 1; a <= 5; a++) {
+    for (let b = 1; b <= 5; b++) {
+      const z = `C_Z${a}${b}`;
+      let fill = null;
+      if (START_ZONES.includes(z)) fill = 'rgba(128,128,128,0.35)';
+      else if (z === 'C_Z32') fill = 'rgba(198,40,40,0.25)';
+      else if (ORANGE.includes(z)) fill = 'rgba(242,179,61,0.30)';
+      if (visited.includes(z) || (d && d.red_zone_done && z === 'C_Z32' && visited.includes(z))) fill = 'rgba(8,126,156,0.30)';
+      if (d && d.target === z) fill = 'rgba(8,126,156,0.65)';
+      if (fill) { g.fillStyle = fill; g.fillRect(X(a - 1), Y(b), k, k); }
+      g.strokeStyle = css('--line'); g.lineWidth = dpr; g.strokeRect(X(a - 1), Y(b), k, k);
+      if (remaining.includes(z)) { g.strokeStyle = css('--accent'); g.lineWidth = 3 * dpr; g.strokeRect(X(a - 1) + 3 * dpr, Y(b) + 3 * dpr, k - 6 * dpr, k - 6 * dpr); }
+      g.fillStyle = css('--muted'); g.fillText(`${a}${b}`, X(a - 0.5), Y(b - 0.15));
+    }
+  }
+  g.strokeStyle = css('--text'); g.lineWidth = 3 * dpr; g.strokeRect(X(0), Y(5), 5 * k, 5 * k);
+  for (const [bx, by, rot] of (d && d.mps_boxes) || []) {
+    g.save(); g.translate(X(bx), Y(by)); g.rotate(-rot * Math.PI / 180);
+    g.fillStyle = '#7A4A00'; g.fillRect(-0.1 * k, -0.1 * k, 0.2 * k, 0.2 * k); g.restore();
+  }
+  if (d && d.pose) {
+    const [x, y, th] = d.pose;
+    g.save(); g.translate(X(x), Y(y)); g.rotate(-th);
+    g.fillStyle = css('--accent'); g.beginPath(); g.arc(0, 0, 0.22 * k, 0, 2 * Math.PI); g.globalAlpha = 0.35; g.fill(); g.globalAlpha = 1;
+    g.beginPath(); g.moveTo(0.3 * k, 0); g.lineTo(-0.1 * k, 0.12 * k); g.lineTo(-0.1 * k, -0.12 * k); g.closePath(); g.fill();
+    g.restore();
+  }
+}
+setInterval(() => { if (S.tab === 'game') renderGame(); }, 1000);
+window.addEventListener('resize', () => { if (S.tab === 'game') renderGame(); });
+
 /* ---------- tabs ---------- */
 document.querySelectorAll('.tabs button').forEach((b) => {
   b.onclick = () => {
@@ -816,6 +901,8 @@ document.querySelectorAll('.tabs button').forEach((b) => {
     if (S.tab !== 'drive' && S.tab !== 'map') stopDriving();
     if (S.tab === 'map') pollMap(true);
     subscribeMarkers(S.tab === 'camera');
+    subscribeGame(S.tab === 'game');
+    if (S.tab === 'game') renderGame();
     if (S.status) render();
     if (S.tab === 'test') api('tests').then(renderTests).catch(() => {});
   };

@@ -194,3 +194,7 @@ a.btn { text-decoration: none; display: inline-block; }
 #map-preview img { width: 100%; max-width: 640px; image-rendering: pixelated; border: 1px solid var(--line); border-radius: 8px; }
 .zones-box { margin-top: 8px; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
 .zones-box summary { min-height: 36px; display: flex; align-items: center; cursor: pointer; }
+.game-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 8px 0 12px; }
+.game-stats > div { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px; border: 1px solid var(--line); border-radius: 8px; }
+.game-stats .big { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
+#game-canvas { display: block; margin: 0 auto; max-width: 100%; }

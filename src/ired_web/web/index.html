@@ -124,6 +124,20 @@
     </section>
 
     <!-- TEST -->
+    <section class="page" id="page-game" hidden>
+      <div class="card">
+        <h2>Navigation game <span class="muted small" id="game-state"></span></h2>
+        <div class="game-stats">
+          <div><span class="big" id="game-count">–/12</span><span class="muted small">zones counted</span></div>
+          <div><span class="big" id="game-time">–:––</span><span class="muted small">left of 10:00</span></div>
+          <div><span class="big" id="game-retries">–</span><span class="muted small">retries</span></div>
+        </div>
+        <canvas id="game-canvas" aria-label="Field with the zones of the game"></canvas>
+        <p class="small" id="game-msg">Start "Challenge: Navigation" on the Launch page; this page shows the game while it runs.</p>
+        <p class="muted small">Cyan = counted, outlined = still to go, dark cyan = driving there, orange = never a box,
+          red = red zone, grey = START, brown = MPS boxes.</p>
+      </div>
+    </section>
     <section class="page" id="page-test" hidden>
       <div class="job" id="test-job" hidden>
         <div class="head"><span class="title" id="job-title"></span><span class="badge" id="job-state"></span></div>
@@ -199,6 +213,7 @@
     <button data-tab="launch">Launch</button>
     <button data-tab="drive">Drive</button>
     <button data-tab="map">Map</button>
+    <button data-tab="game">Game</button>
     <button data-tab="test">Test</button>
     <button data-tab="camera">Camera</button>
   </nav>
