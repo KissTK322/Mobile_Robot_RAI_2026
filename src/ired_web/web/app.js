@@ -965,6 +965,33 @@ function drawGame(d, remaining, visited) {
 setInterval(() => { if (S.tab === 'game') renderGame(); }, 1000);
 window.addEventListener('resize', () => { if (S.tab === 'game') renderGame(); });
 
+/* ---------- ready (pre-game checklist) ---------- */
+const READY_TEXT = { ok: 'OK', warn: 'Check', bad: 'Fix', unknown: '?' };
+async function pollReady() {
+  if (S.tab !== 'ready') return;
+  try {
+    const r = await api('preflight');
+    const bad = r.checks.filter((c) => c.state === 'bad').length, warn = r.checks.filter((c) => c.state === 'warn').length;
+    const banner = $('#ready-banner');
+    banner.className = 'ready-banner ' + r.overall;
+    banner.textContent = r.overall === 'ok' ? 'Ready: every check is green' :
+      `${bad ? bad + ' to fix' : ''}${bad && warn ? ', ' : ''}${warn ? warn + ' to check' : ''}`;
+    $('#ready-time').textContent = '· ' + new Date(r.time * 1000).toLocaleTimeString();
+    $('#ready-list').replaceChildren(...r.checks.map((c) => {
+      const li = document.createElement('li'); li.className = 'ready-item ' + c.state;
+      const dot = document.createElement('span'); dot.className = 'ready-dot'; dot.textContent = READY_TEXT[c.state] || c.state;
+      const body = document.createElement('div');
+      const t = document.createElement('div'); t.className = 'ready-label'; t.textContent = c.label;
+      const v = document.createElement('div'); v.className = 'small'; v.textContent = c.value;
+      body.append(t, v);
+      if (c.fix) { const f = document.createElement('div'); f.className = 'small muted'; f.textContent = '→ ' + c.fix; body.append(f); }
+      li.append(dot, body);
+      return li;
+    }));
+  } catch (e) { /* offline or PIN dialog: next round */ }
+}
+setInterval(pollReady, 1000);
+
 /* ---------- tabs ---------- */
 document.querySelectorAll('.tabs button').forEach((b) => {
   b.onclick = () => {
@@ -974,6 +1001,7 @@ document.querySelectorAll('.tabs button').forEach((b) => {
     if (S.tab !== 'drive' && S.tab !== 'map') stopDriving();
     if (S.tab === 'map') pollMap(true);
     subscribeMarkers(S.tab === 'camera');
+    if (S.tab === 'ready') pollReady();
     subscribeGame(S.tab === 'game');
     if (S.tab === 'game') renderGame();
     if (S.status) render();

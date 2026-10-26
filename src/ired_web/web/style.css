@@ -222,3 +222,14 @@ a.btn { text-decoration: none; display: inline-block; }
   #page-game > .card { min-width: 0; }
   #page-game > .card:last-child { position: sticky; top: 76px; }
 }
+.ready-banner { font-weight: 700; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line); }
+.ready-banner.ok { color: var(--ok); border-color: var(--ok); }
+.ready-banner.warn { color: var(--warn); border-color: var(--warn); }
+.ready-banner.bad { color: var(--bad); border-color: var(--bad); }
+.ready-list { list-style: none; padding: 0; margin: 10px 0; display: grid; gap: 8px; }
+.ready-item { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
+.ready-label { font-weight: 600; }
+.ready-dot { flex: 0 0 44px; text-align: center; font-size: 12px; font-weight: 700; border-radius: 6px; padding: 4px 0; color: #fff; background: var(--muted); }
+.ready-item.ok .ready-dot { background: var(--ok); }
+.ready-item.warn .ready-dot { background: var(--warn); }
+.ready-item.bad .ready-dot { background: var(--bad); }

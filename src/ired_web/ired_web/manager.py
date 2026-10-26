@@ -9,6 +9,7 @@ import csv
 import hmac
 import io
 import json
+import math
 import os
 import signal
 import subprocess
@@ -390,7 +391,7 @@ class Manager:
         self.profiles = {n: Profile(n, spec, cfg) for n, spec in cfg['profiles'].items()}
         self.failures = {}       # ip -> (count, locked_until)
         self.job = None
-        self.last_viewed = {'status': 0.0, 'gains': 0.0, 'map': 0.0}
+        self.last_viewed = {'status': 0.0, 'gains': 0.0, 'map': 0.0, 'ready': 0.0}
         self.results_path = os.path.join(cfg['log_dir'], 'results.jsonl')
         try:
             share_maps = os.path.join(get_package_share_directory('ired_navigation'), 'maps')
@@ -599,15 +600,81 @@ class Manager:
 
     def idle_check(self):
         now = time.time()
+        ready = now - self.last_viewed.get('ready', 0.0) < 5.0
         if now - self.last_viewed['status'] < 5.0:
             topics = {name for name, _, _ in WATCHED_TOPICS}
         elif now - self.last_viewed['gains'] < 5.0:
             topics = {'/ired/motor/data'}
         else:
             topics = set()
+        if ready:       # Ready page: only what the checklist needs
+            topics |= {'/scan_filtered', '/ired/motor/data', '/odometry/filtered'}
         self.node.watch(topics)
-        self.node.mapwatch.watch(now - self.last_viewed['map'] < 5.0)
+        self.node.mapwatch.watch(now - self.last_viewed['map'] < 5.0 or ready)
         self.watch_game(now-self.last_viewed['game'] < 5.0 or self.practice.game.state in ('countdown', 'running'))
+
+    def preflight(self):
+        """Ready page: one line per thing to check before a game, each ok / warn / bad / unknown
+        with the value seen and what to do. Read-only: nothing is started or moved here."""
+        self.viewed('ready')
+        rates, snap = self.node.rates(), self.system.snapshot()
+        running = lambda n: n in self.profiles and self.profiles[n].info()['state'] == 'running'
+        checks = []
+
+        def add(key, label, state, value, fix=''):
+            checks.append({'key': key, 'label': label, 'state': state, 'value': value, 'fix': fix})
+
+        add('estop', 'STOP released', 'bad' if self.node.estop else 'ok',
+            'STOP is on' if self.node.estop else 'released', 'Release STOP (top bar)' if self.node.estop else '')
+        robot = running('robot')
+        add('robot', 'Robot mode', 'ok' if robot else 'bad', 'running' if robot else 'not running',
+            '' if robot else 'Launch page: Start Robot')
+        hz = rates.get('/ired/motor/data', 0.0)
+        add('motors', 'Wheel board talking', 'ok' if hz >= 5 else ('bad' if robot else 'unknown'), f'{hz:.0f} Hz',
+            'Switch the motor drive ON too (wheels stay still with it off); check the USB cable' if hz < 5 else
+            'Drive switch cannot be checked without moving: make sure it is ON')
+        hz = rates.get('/scan_filtered', 0.0)
+        add('lidar', 'LiDAR', 'ok' if hz >= 6 else ('warn' if hz > 0 else ('bad' if robot else 'unknown')),
+            f'{hz:.1f} Hz', '' if hz >= 6 else 'LiDAR spinning? Stop and Start Robot')
+        navs = [n for n in self.profiles if n.startswith('navigation') and running(n)]
+        nodes = set(self.node.get_node_names())
+        active = self.maps.active()
+        if not navs:
+            add('nav', 'Navigation', 'bad', 'not running', 'Launch page: Start Navigation (soft-stop)')
+        else:
+            cmd = self.profiles[navs[0]].command
+            same = f'map_name:={active}.yaml' in cmd
+            up = {'map_server', 'amcl', 'controller_server'} <= nodes
+            add('nav', 'Navigation', 'ok' if same and up else 'warn',
+                f"{self.profiles[navs[0]].spec.get('title', navs[0])}, map {active}" + ('' if up else ' (starting)'),
+                '' if same else f'Map changed after Navigation started: Stop and Start Navigation to load {active}')
+        pose = self.node.mapwatch.pose()
+        if pose is None:
+            add('start', 'Start pose C_Z51', 'unknown' if not navs else 'warn', 'no pose yet',
+                'Put the robot on C_Z51 facing C_Z41, Map page: "Robot is at C_Z51"')
+        else:
+            x, y, yaw = pose
+            d = math.hypot(x - 4.5, y - 0.5)
+            dyaw = abs(math.degrees(math.atan2(math.sin(yaw - math.pi), math.cos(yaw - math.pi))))
+            ok = d <= 0.10 and dyaw <= 10
+            add('start', 'Start pose C_Z51', 'ok' if ok else 'warn',
+                f'({x:.2f}, {y:.2f}) {d * 100:.0f} cm / {dyaw:.0f} deg from the start',
+                '' if ok else 'Put the robot on C_Z51 facing C_Z41, Map page: "Robot is at C_Z51"')
+        chal = running('challenge_nav')
+        add('challenge', 'Challenge program + refbox', 'ok' if chal else 'warn',
+            f"source {getattr(self.practice, 'source', '?')}, challenge {'running' if chal else 'stopped'}",
+            '' if chal else 'Game page: Prepare (practice) or Launch: Challenge: Navigation (field refbox)')
+        t = snap['temp_c']
+        thr = snap.get('throttled') or ''
+        add('temp', 'Pi temperature', 'ok' if t < 70 and thr in ('', '0x0') else ('warn' if t < 80 else 'bad'),
+            f'{t:.0f} C' + (f', throttled {thr}' if thr not in ('', '0x0') else ''),
+            '' if t < 70 else 'Check the fan; let the Pi cool down')
+        add('cpu', 'Pi CPU', 'ok' if snap['cpu_percent'] < 70 else 'warn', f"{snap['cpu_percent']:.0f} %",
+            '' if snap['cpu_percent'] < 70 else 'Close Camera / Record if not needed')
+        add('battery', 'Battery', 'unknown', 'no sensor', 'Check the battery voltage by hand before the game')
+        worst = 'bad' if any(c['state'] == 'bad' for c in checks) else (
+            'warn' if any(c['state'] == 'warn' for c in checks) else 'ok')
+        return {'time': time.time(), 'overall': worst, 'checks': checks}
 
     def map_info(self):
         self.viewed('map')
@@ -711,6 +778,8 @@ def make_handler(manager):
             if method == 'POST' and parts == ['estop']:
                 manager.set_estop(bool(self.body_json().get('active', True)))
                 return self.send_json(200, {'estop': manager.node.estop})
+            if method == 'GET' and parts == ['preflight']:
+                return self.send_json(200, manager.preflight())
             if method == 'GET' and parts == ['map', 'info']:
                 return self.send_json(200, manager.map_info())
             if method == 'GET' and parts == ['map', 'png']:

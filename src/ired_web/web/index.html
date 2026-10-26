@@ -23,6 +23,14 @@
 
   <main>
     <!-- STATUS -->
+    <section class="page" id="page-ready" hidden>
+      <div class="card">
+        <h2>Ready to play? <span class="muted small" id="ready-time"></span></h2>
+        <p class="ready-banner" id="ready-banner">Checking…</p>
+        <ul class="ready-list" id="ready-list"></ul>
+        <p class="muted small">Updates every second while this page is open. Nothing is started or moved from here.</p>
+      </div>
+    </section>
     <section class="page" id="page-status">
       <div class="grid" id="sys-cards"></div>
       <h2>Topics</h2>
@@ -257,6 +265,7 @@
   </main>
 
   <nav class="tabs">
+    <button data-tab="ready">Ready</button>
     <button data-tab="status" class="active">Status</button>
     <button data-tab="launch">Launch</button>
     <button data-tab="drive">Drive</button>

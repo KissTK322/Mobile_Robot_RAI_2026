@@ -120,6 +120,19 @@ class H(http.server.SimpleHTTPRequestHandler):
                                               'fan_pwm_percent': 0, 'fan_rpm': None, 'throttled': '0x0',
                                               'ram_percent': 20, 'disk_percent': 30, 'wifi': None,
                                               'uptime_s': 60, 'ips': ['127.0.0.1']}})
+        if p == 'preflight':
+            ck = lambda k, l, st, v, fix='': {'key': k, 'label': l, 'state': st, 'value': v, 'fix': fix}
+            checks = [ck('estop', 'STOP released', 'ok', 'released'), ck('robot', 'Robot mode', 'ok', 'running'),
+                      ck('motors', 'Wheel board talking', 'ok', '10 Hz', 'Drive switch cannot be checked without moving: make sure it is ON'),
+                      ck('lidar', 'LiDAR', 'ok', '7.3 Hz'),
+                      ck('nav', 'Navigation', 'ok', 'Navigation (soft-stop), map Titan-1-cleaned-field'),
+                      ck('start', 'Start pose C_Z51', 'warn', '(4.32, 0.61) 21 cm / 4 deg from the start',
+                         'Put the robot on C_Z51 facing C_Z41, Map page: "Robot is at C_Z51"'),
+                      ck('challenge', 'Challenge program + refbox', 'warn', 'source practice, challenge stopped',
+                         'Game page: Prepare (practice) or Launch: Challenge: Navigation (field refbox)'),
+                      ck('temp', 'Pi temperature', 'ok', '46 C'), ck('cpu', 'Pi CPU', 'ok', '23 %'),
+                      ck('battery', 'Battery', 'unknown', 'no sensor', 'Check the battery voltage by hand before the game')]
+            return self.send_json({'time': time.time(), 'overall': 'warn', 'checks': checks})
         if p == 'map/info':
             return self.send_json({'have': True, 'version': 1, 'width': img.width, 'height': img.height,
                                    'resolution': meta['resolution'], 'origin': meta['origin'][:2],
