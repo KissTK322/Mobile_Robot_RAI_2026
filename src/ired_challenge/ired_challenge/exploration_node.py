@@ -79,7 +79,8 @@ class ExplorationNode(Node):
         p = self.declare_parameters('', [
             ('zone_size', 1.0), ('origin_x', 0.0), ('origin_y', 0.0), ('red_zone', 'C_Z32'),
             ('expected', ['C-BS', 'C-CS1']), ('skip_zones', ['C_Z31', 'C_Z41', 'C_Z51', 'C_Z32']),
-            ('look_time', 1.5), ('wall_clearance', 0.30), ('rate', 10.0),
+            ('look_time', 1.5), ('look_spread_deg', 12.0), ('final_single_view', True),
+            ('wall_clearance', 0.30), ('rate', 10.0),
             ('min_sightings', 10), ('min_views', 2), ('max_range', 2.0), ('refbox_rules', False),
             ('map_frame', 'map'), ('base_frame', 'base_footprint'), ('cmd_vel_topic', '/cmd_vel'),
             ('practice_watchdog', False),
@@ -113,6 +114,7 @@ class ExplorationNode(Node):
         self.task = ExplorationTask(
             Mover(self.navigator, self), self.field, self.est, self.report, log=self.get_logger().info,
             expected=g['expected'], red_zone=g['red_zone'], look_time=g['look_time'],
+            look_spread_deg=g['look_spread_deg'], final_single_view=g['final_single_view'],
             # zones that can hold a machine at all (not START, the red zone or an orange zone)
             candidate=lambda z: z not in skip and bool(allowed_rotations(z, 'C-BS')), free=self.free)
         self.get_logger().info(f"Exploration challenge ready, looking for {g['expected']}")

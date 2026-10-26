@@ -152,6 +152,7 @@ class MachineEstimator:
             'machine': name, 'x': round(cx, 3), 'y': round(cy, 3), 'zone': zone,
             'rotation': rotation, 'input_dir_deg': round(measured, 1), 'plausible': plausible,
             'sightings': len(pts), 'agreeing': len(close), 'views': len(self.views[name]),
+            'well_inside': well_inside,
             'ready': (len(close) >= self.min_sightings and len(self.views[name]) >= self.min_views
                       and well_inside and plausible),
         }

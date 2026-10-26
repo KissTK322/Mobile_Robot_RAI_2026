@@ -51,13 +51,16 @@ def border_route(a, b):
 
 class ExplorationTask:
     def __init__(self, nav, field, estimator, report, log=print, expected=('C-BS', 'C-CS1'),
-                 red_zone='C_Z32', candidate=None, free=None, look_time=1.5, move_timeout=30.0):
+                 red_zone='C_Z32', candidate=None, free=None, look_time=1.5, move_timeout=30.0,
+                 look_spread_deg=12.0, final_single_view=True):
         self.nav, self.field, self.est, self.report, self.log = nav, field, estimator, report, log
         self.expected = list(expected)
         self.red_zone = red_zone
         self.candidate = candidate or (lambda zone: True)    # may this zone hold a machine?
         self.free = free or (lambda p: True)                 # is this point clear of walls?
         self.look_time, self.move_timeout = look_time, move_timeout
+        self.look_spread = math.radians(look_spread_deg)
+        self.final_single_view = final_single_view
         self.state, self.t_state = WAIT_GAME, 0.0
         self.reported = {}                                   # machine -> report dict
         self.queue, self.looks = [], []
@@ -78,21 +81,37 @@ class ExplorationTask:
 
     # ------------------------------------------------------------ helpers
     def _looks_at(self, p):
-        """Headings from crossing p to the neighbouring zone centres worth looking at."""
+        """Headings from crossing p to the neighbouring zone centres worth looking at.
+
+        Each zone gets the centre heading and, with `look_spread`, one heading on each side of
+        it: the box is only ~0.45 m from the lens, its markers are 0.1 m off the box centre and
+        the robot stops up to ~0.1 m short of the crossing and ~4 deg short of the heading, so a
+        marker of a box on a border zone (conveyor along the wall, seen only obliquely) can be
+        outside the 35.5 deg image of the real camera when it looks at the zone centre."""
         out = []
         for dx in (-0.5, 0.5):
             for dy in (-0.5, 0.5):
                 zone = self.field.zone_at(p[0] + dx, p[1] + dy)
                 if zone and self.candidate(zone) and not self._zone_done(zone):
-                    out.append(math.atan2(dy, dx))
+                    h = math.atan2(dy, dx)
+                    out += [h - self.look_spread, h, h + self.look_spread] if self.look_spread else [h]
         return out
 
     def _zone_done(self, zone):
         return any(r['zone'] == zone for r in self.reported.values())
 
-    def _report_ready(self):
+    def _report_ready(self, final=False):
+        """Report every machine the estimator calls ready. `final` (sweep finished, nothing more
+        to see): also a machine seen from one robot position only, if it has enough agreeing
+        sightings well inside a zone. A box on a border zone shows its markers only obliquely,
+        so the second crossing next to it often sees nothing (PC sim 2026-10-26: 3 of 4 games
+        found one machine and stood still for 350 s); a solid one-view estimate is then better
+        than no report."""
         for e in self.est.all():
-            if not e or e['machine'] in self.reported or e['machine'] not in self.expected or not e['ready']:
+            if not e or e['machine'] in self.reported or e['machine'] not in self.expected:
+                continue
+            if not (e['ready'] or (final and e['agreeing'] >= self.est.min_sightings
+                                   and e['well_inside'] and e['plausible'])):
                 continue
             cx, cy = self.field.center(e['zone'])            # zone centre: safest for the zone
             if self.report(e['machine'], cx, cy, e['rotation']):
@@ -112,6 +131,8 @@ class ExplorationTask:
             self.nav.go_via(pts, pose[2])
             self._set(MOVE, now)
             return
+        if self.final_single_view:
+            self._report_ready(final=True)
         self.log(f'Sweep finished, reported {sorted(self.reported)}')
         self._set(DONE, now)
 

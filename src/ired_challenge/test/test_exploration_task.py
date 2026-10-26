@@ -57,8 +57,9 @@ class FakeRobot:
         self.trace.append((self.x, self.y))
 
 
-def camera(robot, boxes, rng, cam_x=0.23, hfov=math.radians(45.6)):
-    """Detections like /aruco/detections: (id, pos_base, marker_yaw_deg)."""
+def camera(robot, boxes, rng, cam_x=0.23, hfov=math.radians(45.6), miss=0.0):
+    """Detections like /aruco/detections: (id, pos_base, marker_yaw_deg). `miss`: share of
+    frames lost per m of distance (at most 70 %), like the PC sim camera."""
     cx, cy = robot.x + cam_x * math.cos(robot.yaw), robot.y + cam_x * math.sin(robot.yaw)
     out = []
     for kind, zone, rot in boxes:
@@ -71,6 +72,8 @@ def camera(robot, boxes, rng, cam_x=0.23, hfov=math.radians(45.6)):
             v = math.atan2(cy - m[1], cx - m[0]) - n
             if not (0.25 <= d <= 2.0) or abs(math.atan2(math.sin(b), math.cos(b))) > hfov / 2 \
                     or abs(math.atan2(math.sin(v), math.cos(v))) > math.radians(60):
+                continue
+            if miss and rng.random() > max(0.3, 1.0 - miss * d):
                 continue
             sd = 0.01 + 0.02 * d
             mx, my = m[0] + rng.gauss(0, sd), m[1] + rng.gauss(0, sd)
@@ -163,3 +166,62 @@ def test_drives_aborted_on_the_way_are_resent_not_skipped():
         for a in range(1, 6):
             for b in range(2, 6):
                 assert math.hypot(x - (a - 0.5), y - (b - 0.5)) >= 0.45, (x, y)
+
+
+class ShortRobot(FakeRobot):
+    """Like Nav2 on the robot and in the PC sim: stops up to 0.1 m short of the last waypoint."""
+
+    def step(self, dt):
+        if self._state == 'active' and self.goal_yaw is None and len(self.via) == 1 \
+                and math.hypot(self.via[0][0] - self.x, self.via[0][1] - self.y) <= 0.09:
+            self.via, self._state = [], 'succeeded'
+            return
+        super().step(dt)
+
+
+@pytest.mark.parametrize('boxes', [
+    [('BS', 'C_Z25', 180), ('CS1', 'C_Z22', 0)],                 # PC sim 2026-10-26 E1 seed 3
+    [('BS', 'C_Z34', 135), ('CS1', 'C_Z53', 270)],               # seed 5
+    [('BS', 'C_Z12', 90), ('CS1', 'C_Z33', 0)],                  # seed 7
+])
+def test_border_boxes_with_the_real_camera(boxes, monkeypatch):
+    """Robot camera (640x480 calibration: HFOV 35.5 deg, lens 0.25 m forward) and a robot that
+    stops short: a box on a border zone (conveyor along the wall) shows each marker only
+    obliquely to one crossing, off the zone-centre heading."""
+    real = camera
+    monkeypatch.setitem(globals(), 'camera', lambda r, b, g: real(r, b, g, cam_x=0.25, hfov=math.radians(35.5), miss=0.38))
+    task, reports, robot, t = run(boxes, robot_cls=ShortRobot)
+    truth = {f'C-{k}': (z, r % 360) for k, z, r in boxes}
+    assert {m: (z, r) for m, z, r in reports} == truth, reports
+    assert t < 600, f'{t:.0f} s'
+
+
+def test_three_headings_per_zone():
+    task = ExplorationTask(FakeRobot((1.0, 4.0), 0.0), F, MachineEstimator(F), lambda *a: True, log=lambda s: None)
+    heads = sorted(round(math.degrees(h)) for h in task._looks_at((1.0, 4.0)))
+    assert heads == [-147, -135, -123, -57, -45, -33, 33, 45, 57, 123, 135, 147]
+    task = ExplorationTask(FakeRobot((1.0, 4.0), 0.0), F, MachineEstimator(F), lambda *a: True, log=lambda s: None,
+                           look_spread_deg=0.0)
+    assert sorted(round(math.degrees(h)) for h in task._looks_at((1.0, 4.0))) == [-135, -45, 45, 135]
+
+
+@pytest.mark.parametrize('final_single_view, n_sightings, expected', [
+    (True, 12, [('C-BS', 'C_Z25', 180)]),       # one view, solid: reported when the sweep ends
+    (True, 4, []),                                # too few sightings
+    (False, 12, []),                              # fallback off
+])
+def test_one_view_machine_reported_when_the_sweep_ends(final_single_view, n_sightings, expected):
+    """C_Z25 rotation 180 seen only from crossing (1, 4): never `ready` (min_views 2)."""
+    est = MachineEstimator(F, refbox_rules=False)
+    rng = random.Random(3)
+    robot = FakeRobot((1.0, 3.92), math.radians(52))
+    for _ in range(n_sightings):
+        for mid, pos, face in camera(robot, [('BS', 'C_Z25', 180)], rng, cam_x=0.25, hfov=math.radians(35.5)):
+            est.add((robot.x, robot.y, robot.yaw), mid, pos, face)
+    assert est.estimate('C-BS')['views'] == 1 and not est.estimate('C-BS')['ready']
+    reports = []
+    task = ExplorationTask(robot, F, est, lambda m, x, y, r: reports.append((m, F.zone_at(x, y), r)) or True,
+                           log=lambda s: None, final_single_view=final_single_view)
+    task.state = 'LOOK'
+    task._next((robot.x, robot.y, robot.yaw), 100.0)            # empty queue: sweep finished
+    assert task.state == DONE and reports == expected
