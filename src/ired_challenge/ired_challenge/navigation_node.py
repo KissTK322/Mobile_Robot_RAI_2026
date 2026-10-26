@@ -52,8 +52,10 @@ def split_at_corners(points, min_turn_deg=20.0):
 class Nav2Adapter:
     """The small interface NavigationTask expects, on top of nav2_simple_commander."""
 
-    def __init__(self, navigator, escape=None, legs=False):
+    def __init__(self, navigator, escape=None, legs=False, nudge=None):
         self.n = navigator
+        if nudge is not None:
+            self.nudge = nudge      # (vx, vy) in the robot frame, for the fine approach
         self.active = False
         self.last = 'succeeded'
         self._escape = escape
@@ -200,6 +202,9 @@ class NavigationChallengeNode(Node):
             ('stuck_time', 8.0), ('stuck_dist', 0.10),
             ('practice_watchdog', False),
             ('route_legs', False),   # send grid/lanes routes one straight piece at a time
+            # fine approach during the dwell (see NavigationTask._fine_step); off by default
+            ('fine_approach', False), ('fine_tol', 0.03), ('fine_gain', 1.0), ('fine_vmax', 0.08),
+            ('fine_vmin', 0.03), ('fine_time', 3.0), ('fine_topic', '/cmd_vel_nav'),
         ])
         g = {x.name: x.value for x in p}
         self.cfg = g
@@ -233,11 +238,24 @@ class NavigationChallengeNode(Node):
         # until AMCL answers, which throws AMCL out of the field. AMCL gets its start pose from
         # navigation.yaml (or the web app), so wait only for the lifecycle nodes to be active.
         wait_nav2_active(self.navigator, self.get_logger().info)
+        fine, nudge = None, None
+        if g['fine_approach']:
+            # into the velocity smoother (soft limits) and then the collision monitor (safety)
+            self.fine_pub = self.create_publisher(TwistStamped, g['fine_topic'], 10)
+            fine = {k: g['fine_' + k] for k in ('tol', 'gain', 'vmax', 'vmin', 'time')}
+
+            def nudge(vx, vy):
+                m = TwistStamped()
+                m.header.stamp = self.get_clock().now().to_msg()
+                m.header.frame_id = g['base_frame']
+                m.twist.linear.x, m.twist.linear.y = float(vx), float(vy)
+                self.fine_pub.publish(m)
         self.task = NavigationTask(
-            Nav2Adapter(self.navigator, self.escape, legs=g['route_legs']), self.field, log=self.get_logger().info,
+            Nav2Adapter(self.navigator, self.escape, legs=g['route_legs'], nudge=nudge), self.field,
+            log=self.get_logger().info,
             red_zone=g['red_zone'], dwell=g['dwell'], confirm_timeout=g['confirm_timeout'],
             drive_timeout=g['drive_timeout'], retries=g['retries'], order=g['order'],
-            grid_tries=g['grid_tries'], stuck_time=g['stuck_time'], stuck_dist=g['stuck_dist'])
+            grid_tries=g['grid_tries'], stuck_time=g['stuck_time'], stuck_dist=g['stuck_dist'], fine=fine)
         self.router = None
         if g['route_mode'] in ('grid', 'lanes'):
             # The router goes live only once the map is in: without the walls it would
