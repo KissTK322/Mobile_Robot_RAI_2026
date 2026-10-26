@@ -226,6 +226,47 @@ class MapStore:
         return {'name': name, 'width_m': round(msg.info.width * msg.info.resolution, 2),
                 'height_m': round(msg.info.height * msg.info.resolution, 2)}
 
+    @staticmethod
+    def is_original(name):
+        """A map straight from SLAM (or the seniors' map): no -clean / -aligned / -adj / -field
+        step in its name. Deleting one of those needs an extra confirmation."""
+        return not re.search(r'-(clean|aligned|adj|field)(-\d+)?($|-)', name, re.I)
+
+    def delete(self, name, original_ok=False):
+        """Remove <name>.yaml, its image, <name>.zones.json and the share links. Never the map
+        Navigation uses; an original only with original_ok. Links in the share folder are
+        unlinked, never followed."""
+        if not NAME_RE.match(name or '') or not any(m['name'] == name for m in self.list()):
+            raise ValueError(f'No map called {name}')
+        if name == self.active():
+            raise ValueError(f'{name} is the map Navigation uses: choose another map first')
+        if self.is_original(name) and not original_ok:
+            raise ValueError(f'{name} is an original map (from SLAM): confirm deleting an original')
+        yaml_path = os.path.join(self.src_dir, name + '.yaml')
+        image = None
+        try:
+            with open(yaml_path) as f:
+                image = (yaml.safe_load(f) or {}).get('image')
+        except (OSError, yaml.YAMLError):
+            pass
+        removed = []
+        # only files of this map inside the maps folder: <name>.yaml, its own image, zones
+        files = [name + '.yaml', name + '.zones.json']
+        if image and os.path.basename(image) == image and os.path.splitext(image)[0] == name:
+            files.append(image)
+        for fn in files:
+            path = os.path.join(self.src_dir, fn)
+            if os.path.isfile(path) and not os.path.islink(path):
+                os.remove(path)
+                removed.append(fn)
+        if self.share_dir and os.path.realpath(self.share_dir) != os.path.realpath(self.src_dir):
+            for ext in ('.yaml', '.pgm'):
+                link = os.path.join(self.share_dir, name + ext)
+                if os.path.islink(link):
+                    os.unlink(link)
+                    removed.append('share/' + name + ext)
+        return {'name': name, 'removed': removed}
+
     def unique_name(self, base):
         name, k = base[:40], 2
         while os.path.exists(os.path.join(self.src_dir, name + '.yaml')):

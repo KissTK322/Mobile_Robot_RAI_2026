@@ -735,6 +735,13 @@ def make_handler(manager):
                 except (ValueError, OSError) as e:
                     return self.send_json(400, {'error': str(e)})
                 return self.send_json(200, out)
+            if method == 'POST' and parts == ['map', 'delete']:
+                body = self.body_json()
+                try:
+                    out = manager.maps.delete(str(body.get('name', '')).strip(), bool(body.get('original', False)))
+                except (ValueError, OSError) as e:
+                    return self.send_json(400, {'error': str(e)})
+                return self.send_json(200, out)
             if method == 'POST' and parts == ['map', 'nudge']:
                 body = self.body_json()
                 try:

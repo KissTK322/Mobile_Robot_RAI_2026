@@ -599,13 +599,31 @@ function renderMap() {
       b.onclick = () => api('map/select', { method: 'POST', body: { name: m.name } })
         .then(() => { $('#map-msg').textContent = `Navigation will use ${m.name}.`; pollMap(true); })
         .catch(() => { $('#map-msg').textContent = 'Could not choose that map.'; });
-      row.append(b);
+      const del = document.createElement('button'); del.className = 'btn danger'; del.textContent = 'Delete';
+      del.onclick = () => deleteMap(m.name);
+      row.append(b, del);
     }
     return row;
   }));
 }
 
 function navMsg(t) { $('#nav-msg').textContent = t; }
+
+// an original = straight from SLAM (no -clean/-aligned/-adj/-field step): extra confirmation
+const isOriginalMap = (name) => !/-(clean|aligned|adj|field)(-\d+)?($|-)/i.test(name);
+async function deleteMap(name) {
+  if (!confirm(`Delete map ${name}? Its files are removed from the robot.`)) return;
+  const original = isOriginalMap(name);
+  if (original && !confirm(`${name} is an ORIGINAL map from SLAM (the copies were made from it). Delete it anyway?`)) return;
+  try {
+    const r = await api('map/delete', { method: 'POST', body: { name, original } });
+    $('#map-msg').textContent = `Deleted ${r.name} (${r.removed.length} files).`;
+    if (NUDGE.name === name) { $('#map-preview').hidden = true; NUDGE.name = null; }
+    pollMap(true);
+  } catch (e) {
+    $('#map-msg').textContent = 'Not deleted: ' + String(e.message || e).replace(/^http \d+: /, '');
+  }
+}
 
 // Fine shift and rotation under the fixed field grid; save one adjusted copy.
 const NUDGE = { name: null, dx: 0, dy: 0, dyaw_deg: 0 };

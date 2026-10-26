@@ -161,6 +161,8 @@ class H(http.server.SimpleHTTPRequestHandler):
                 return self.send_json(PRACTICE.api(self.path.rsplit('/', 1)[-1], body))
             if self.path == '/api/map/nudge':
                 return self.send_json(STORE.nudge(body.get('name', ''), body.get('dx', 0), body.get('dy', 0), body.get('dyaw_deg', 0)))
+            if self.path == '/api/map/delete':
+                return self.send_json(STORE.delete(body.get('name', ''), bool(body.get('original', False))))
             if self.path == '/api/map/clean':
                 return self.send_json(STORE.clean(body.get('name', '')))
             if self.path == '/api/map/align':
