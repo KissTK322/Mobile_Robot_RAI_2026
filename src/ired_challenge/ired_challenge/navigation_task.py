@@ -29,8 +29,14 @@ WAIT_GAME, RED_ZONE, PICK, DRIVE, DWELL, DONE = 'WAIT_GAME', 'RED_ZONE', 'PICK',
 class NavigationTask:
     def __init__(self, nav, field, log=print, red_zone='C_Z32', dwell=5.5, confirm_timeout=4.0,
                  drive_timeout=40.0, retries=2, order='given', blocked_zones=(), router=None,
-                 grid_tries=1, stuck_time=8.0, stuck_dist=0.10):
+                 grid_tries=1, stuck_time=8.0, stuck_dist=0.10, fine=None):
         self.nav, self.field, self.log = nav, field, log
+        # Fine approach (optional): Nav2 calls a zone "reached" up to xy_goal_tolerance (0.10 m)
+        # away. While the robot dwells in the zone anyway, a slow omni P-correction moves it onto
+        # the stop point. dict(tol, gain, vmax, vmin, time) or None (off). Needs nav.nudge(vx, vy).
+        self.fine = fine if fine and hasattr(nav, 'nudge') else None
+        self.fine_t0 = None
+        self.fine_on = False
         self.red_zone = red_zone
         self.dwell = dwell                      # refbox needs 5 s inside the zone
         self.confirm_timeout = confirm_timeout  # extra wait for the refbox to drop the zone
@@ -60,6 +66,10 @@ class NavigationTask:
     def _set(self, state, now):
         if state != self.state:
             self.log(f'{self.state} -> {state}' + (f' ({self.target})' if self.target else ''))
+            if self.state == DWELL:
+                self._fine_stop()
+            if state == DWELL:
+                self.fine_t0 = None
         self.state, self.t_state = state, now
 
     def _drive_to(self, zone, pose, now):
@@ -81,6 +91,30 @@ class NavigationTask:
         self.progress = (now, (pose[0], pose[1]))
         self.drive_from = (pose[0], pose[1])
         self._set(RED_ZONE if zone == self.red_zone and not self.red_done else DRIVE, now)
+
+    def _fine_step(self, now, pose):
+        """Slow P-correction onto goal_xy during the dwell (robot frame, omni, heading kept).
+        Stops at fine['tol'] or after fine['time'] s; the zone keeps counting meanwhile."""
+        f, goal = self.fine, self.goal_xy
+        if goal is None:
+            return
+        if self.fine_t0 is None:
+            self.fine_t0 = now
+        ex, ey = goal[0] - pose[0], goal[1] - pose[1]
+        err = math.hypot(ex, ey)
+        if err <= f['tol'] or now - self.fine_t0 > f['time'] or err > 0.3:
+            self._fine_stop()
+            return
+        c, s = math.cos(pose[2]), math.sin(pose[2])
+        bx, by = c * ex + s * ey, -s * ex + c * ey          # error in the robot frame
+        v = min(f['vmax'], max(f['vmin'], f['gain'] * err))  # vmin: wheels need a minimum to turn
+        self.nav.nudge(v * bx / err, v * by / err)
+        self.fine_on = True
+
+    def _fine_stop(self):
+        if self.fine_on:
+            self.nav.nudge(0.0, 0.0)
+            self.fine_on = False
 
     def _short_of_goal(self, pose, reach=0.3):
         """Within `reach` of the stop point and well inside the target zone."""
@@ -205,7 +239,10 @@ class NavigationTask:
             return self.info()
 
         if self.state == DWELL:
+            if self.fine:
+                self._fine_step(now, pose)
             if self.target not in remaining:
+                self._fine_stop()
                 self._visited(now)
             elif not self.field.inside(self.target, pose[0], pose[1], margin=0.02):
                 self.log(f'Drifted out of {self.target}, driving back')

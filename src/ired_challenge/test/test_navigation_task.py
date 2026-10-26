@@ -425,3 +425,73 @@ def test_no_progress_is_noticed_long_before_the_drive_timeout():
         task.update(t, True, ['C_Z44'], (*robot['xy'], 0.0))
         t += 0.1
     assert any('no progress' in l for l in logs), logs
+
+
+class FakeNavNudge:
+    """Minimal nav for the fine-approach tests: every drive succeeds at once, nudges recorded."""
+
+    def __init__(self):
+        self.nudges, self.last = [], 'succeeded'
+
+    def go_to(self, x, y, yaw):
+        self.last = 'active'
+
+    def state(self):
+        return self.last
+
+    def cancel(self):
+        pass
+
+    def clear_costmaps(self):
+        pass
+
+    def nudge(self, vx, vy):
+        self.nudges.append((vx, vy))
+
+
+def test_fine_approach_moves_onto_the_stop_point_during_the_dwell():
+    from ired_challenge.navigation_task import NavigationTask
+    nav = FakeNavNudge()
+    fine = {'tol': 0.03, 'gain': 1.0, 'vmax': 0.08, 'vmin': 0.03, 'time': 3.0}
+    t = NavigationTask(nav, F, log=lambda *_: None, order='given', fine=fine)
+    t.red_done = True
+    t._set('PICK', 0.0)
+    t.update(0.0, True, ['C_Z44'], (3.5, 2.5, 0.0))           # PICK -> DRIVE
+    t.goal_xy = (3.5, 3.5)
+    nav.last = 'succeeded'
+    t.update(0.1, True, ['C_Z44'], (3.45, 3.43, math.pi))     # reached 9 cm off -> DWELL
+    assert t.state == 'DWELL'
+    t.update(0.2, True, ['C_Z44'], (3.45, 3.43, math.pi))     # correction
+    vx, vy = nav.nudges[-1]
+    # robot faces -x: +x field error (0.05) is -x robot, +y field error (0.07) is -y robot
+    assert vx < 0 and vy < 0 and 0.03 <= math.hypot(vx, vy) <= 0.08 + 1e-9
+    t.update(0.3, True, ['C_Z44'], (3.49, 3.49, math.pi))     # within 3 cm: stop once
+    assert nav.nudges[-1] == (0.0, 0.0)
+    n = len(nav.nudges)
+    t.update(0.4, True, ['C_Z44'], (3.49, 3.49, math.pi))
+    assert len(nav.nudges) == n                               # nothing more after stopping
+
+
+def test_fine_approach_gives_up_after_its_time_and_stops():
+    from ired_challenge.navigation_task import NavigationTask
+    nav = FakeNavNudge()
+    fine = {'tol': 0.03, 'gain': 1.0, 'vmax': 0.08, 'vmin': 0.03, 'time': 3.0}
+    t = NavigationTask(nav, F, log=lambda *_: None, order='given', fine=fine)
+    t.red_done = True
+    t._set('PICK', 0.0)
+    t.update(0.0, True, ['C_Z44'], (3.5, 2.5, 0.0))
+    t.goal_xy = (3.5, 3.5)
+    nav.last = 'succeeded'
+    t.update(0.1, True, ['C_Z44'], (3.45, 3.43, 0.0))
+    for k in range(2, 45):                                    # robot never moves (wheels slip)
+        t.update(k / 10, True, ['C_Z44'], (3.45, 3.43, 0.0))
+    assert nav.nudges[-1] == (0.0, 0.0) and t.state == 'DWELL'
+
+
+def test_fine_approach_off_without_param_or_nudge():
+    from ired_challenge.navigation_task import NavigationTask
+    class NoNudge:
+        pass
+    fine = {'tol': 0.03, 'gain': 1.0, 'vmax': 0.08, 'vmin': 0.03, 'time': 3.0}
+    assert NavigationTask(FakeNavNudge(), F, log=lambda *_: None).fine is None       # param off
+    assert NavigationTask(NoNudge(), F, log=lambda *_: None, fine=fine).fine is None  # nav cannot nudge

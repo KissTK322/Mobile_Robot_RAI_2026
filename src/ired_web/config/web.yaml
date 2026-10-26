@@ -34,20 +34,20 @@ profiles:
     description: Cartographer, build a new map while driving
     command: ros2 launch ired_navigation slam.launch.xml
     requires: [robot]
-    conflicts: [navigation, navigation_omni, navigation_softstop, mapping_odom]
+    conflicts: [navigation, navigation_omni, navigation_softstop, mapping_odom, navigation_quick]
   mapping_odom:
     title: Mapping (odom)
     description: Cartographer helped by wheel + gyro odometry, LiDAR rays cut at 6 m (test; Mapping (SLAM) is plan B)
     command: ros2 launch ired_navigation slam.launch.xml configuration_basename:=ired_rplidar_2d_odom.lua
     requires: [robot]
-    conflicts: [navigation, navigation_omni, navigation_softstop, mapping]
+    conflicts: [navigation, navigation_omni, navigation_softstop, mapping, navigation_quick]
   navigation:
     title: Navigation
     description: Nav2 with the saved map and AMCL
     # {map_name}: the map chosen on the Map page (maps_dir), default map
     command: ros2 launch ired_navigation navigation.launch.xml map_name:={map_name}.yaml
     requires: [robot]
-    conflicts: [mapping, mapping_odom, navigation_omni, navigation_softstop]
+    conflicts: [mapping, mapping_odom, navigation_omni, navigation_softstop, navigation_quick]
   challenge_nav:
     title: "Challenge: Navigation"
     description: Refbox bridge + MPS boxes + navigation challenge program (start a Navigation profile and set the start pose first)
@@ -72,13 +72,20 @@ profiles:
     description: Nav2 tuned for the omni base (sideways, soft start/stop, real robot size)
     command: ros2 launch ired_navigation navigation.launch.xml map_name:={map_name}.yaml param_name:=navigation_omni.yaml
     requires: [robot]
-    conflicts: [mapping, mapping_odom, navigation, navigation_softstop]
+    conflicts: [mapping, mapping_odom, navigation, navigation_softstop, navigation_quick]
   navigation_softstop:
     title: Navigation (soft-stop)
     description: Navigation (omni) with gentle 0.18 m/s^2 starts/stops and wall slowdown only when moving toward it (test)
     command: ros2 launch ired_navigation navigation.launch.xml map_name:={map_name}.yaml param_name:=navigation_softstop.yaml
     requires: [robot]
-    conflicts: [mapping, mapping_odom, navigation, navigation_omni]
+    conflicts: [mapping, mapping_odom, navigation, navigation_omni, navigation_quick]
+
+  navigation_quick:
+    title: Navigation (quick start)
+    description: Like Navigation (soft-stop) but accelerates at 0.30 m/s^2 (braking stays 0.18) - test
+    command: ros2 launch ired_navigation navigation.launch.xml map_name:={map_name}.yaml param_name:=navigation_softstop_quick.yaml
+    requires: [robot]
+    conflicts: [mapping, mapping_odom, navigation, navigation_omni, navigation_softstop]
 
   practice_broker:
     title: Practice MQTT broker
