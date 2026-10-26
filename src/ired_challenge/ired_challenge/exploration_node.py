@@ -31,6 +31,7 @@ from ired_challenge.exploration_task import ExplorationTask
 from ired_challenge.field import Field
 from ired_challenge.grid_planner import seg_point_dist
 from ired_challenge.navigation_node import Nav2Adapter, wait_nav2_active
+from ired_challenge.practice_lease import PracticeLease
 
 
 class Mover(Nav2Adapter):
@@ -81,6 +82,7 @@ class ExplorationNode(Node):
             ('look_time', 1.5), ('wall_clearance', 0.30), ('rate', 10.0),
             ('min_sightings', 10), ('min_views', 2), ('max_range', 2.0), ('refbox_rules', False),
             ('map_frame', 'map'), ('base_frame', 'base_footprint'), ('cmd_vel_topic', '/cmd_vel'),
+            ('practice_watchdog', False),
         ])
         g = {x.name: x.value for x in p}
         self.cfg = g
@@ -92,6 +94,10 @@ class ExplorationNode(Node):
         self.tf = Buffer()
         TransformListener(self.tf, self)
         self.create_subscription(GamePlay, '/refbox/game_play', lambda m: setattr(self, 'game_on', bool(m.status)), 10)
+        # same opt-in practice lease as the navigation challenge (iPad practice refbox)
+        self.practice_lease = PracticeLease(g['practice_watchdog'])
+        if g['practice_watchdog']:
+            self.create_subscription(String, '/practice/heartbeat', lambda m: self.practice_lease.heartbeat(m.data), 10)
         self.create_subscription(String, '/aruco/detections', self.on_detections, 10)
         self.create_subscription(OccupancyGrid, '/map', self.on_map,
                                  QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
@@ -165,10 +171,15 @@ class ExplorationNode(Node):
         return bool(ok)
 
     def step(self):
+        # check the practice lease even when TF is missing
+        game_on = self.practice_lease.allowed(self.game_on)
         pose = self.pose()
         if pose is None:
+            if self.practice_lease.enabled and self.practice_lease.tripped:
+                self.task.nav.cancel()
             return
-        info = self.task.update(self.get_clock().now().nanoseconds / 1e9, self.game_on, pose)
+        info = self.task.update(self.get_clock().now().nanoseconds / 1e9, game_on, pose)
+        info.update(game_on=game_on, practice_watchdog_ok=not self.practice_lease.tripped)
         info['pose'] = [round(v, 3) for v in pose]
         self.state_pub.publish(String(data=json.dumps(info, default=str)))
 
