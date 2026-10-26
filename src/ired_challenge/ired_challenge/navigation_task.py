@@ -23,13 +23,13 @@ import math
 
 from ired_challenge.field import visit_order
 
-WAIT_GAME, RED_ZONE, PICK, DRIVE, DWELL, DONE = 'WAIT_GAME', 'RED_ZONE', 'PICK', 'DRIVE', 'DWELL', 'DONE'
+WAIT_GAME, RED_ZONE, PICK, DRIVE, DWELL, BACKOFF, DONE = 'WAIT_GAME', 'RED_ZONE', 'PICK', 'DRIVE', 'DWELL', 'BACKOFF', 'DONE'
 
 
 class NavigationTask:
     def __init__(self, nav, field, log=print, red_zone='C_Z32', dwell=5.5, confirm_timeout=4.0,
                  drive_timeout=40.0, retries=2, order='given', blocked_zones=(), router=None,
-                 grid_tries=1, stuck_time=8.0, stuck_dist=0.10, fine=None):
+                 grid_tries=1, stuck_time=8.0, stuck_dist=0.10, fine=None, backoff=None):
         self.nav, self.field, self.log = nav, field, log
         # Fine approach (optional): Nav2 calls a zone "reached" up to xy_goal_tolerance (0.10 m)
         # away. While the robot dwells in the zone anyway, a slow omni P-correction moves it onto
@@ -37,6 +37,12 @@ class NavigationTask:
         self.fine = fine if fine and hasattr(nav, 'nudge') else None
         self.fine_t0 = None
         self.fine_on = False
+        # Back off from a box (optional): the LiDAR looks over the 20 cm MPS boxes, and on the
+        # robot (2026-10-26) a stop beside the C_Z33 box ended 0.38 m from its centre (goal 0.46
+        # plus Nav2's tolerance); the next drive turned in place there and hit the box. After a
+        # box zone is counted, slide straight away from the box first. dict(dist, speed, time).
+        self.backoff = backoff if backoff and hasattr(nav, 'nudge') else None
+        self.backoff_from = None
         self.red_zone = red_zone
         self.dwell = dwell                      # refbox needs 5 s inside the zone
         self.confirm_timeout = confirm_timeout  # extra wait for the refbox to drop the zone
@@ -111,6 +117,33 @@ class NavigationTask:
         self.nav.nudge(v * bx / err, v * by / err)
         self.fine_on = True
 
+    def _backoff_step(self, now, pose):
+        """Slide away from backoff_from (robot frame, heading kept). True when done: far
+        enough, out of time, or the next 0.3 m would come close to the field walls."""
+        b = self.backoff
+        ex, ey = pose[0] - self.backoff_from[0], pose[1] - self.backoff_from[1]
+        d = math.hypot(ex, ey)
+        ux, uy = (ex / d, ey / d) if d > 1e-3 else (math.cos(pose[2] + math.pi), math.sin(pose[2] + math.pi))
+        f = self.field
+        ahead = (abs(pose[0] + 0.3 * ux - f.ox), pose[1] + 0.3 * uy - f.oy)   # magenta half is mirrored in x
+        size, cols, rows = f.size, f.columns, f.rows
+        walls_ok = 0.25 <= ahead[0] <= cols * size - 0.25 and 0.25 <= ahead[1] <= rows * size - 0.25
+        if d >= b['dist'] or now - self.t_state > b['time'] or not walls_ok:
+            if d < b['dist']:
+                self.log(f'Back-off stopped {d:.2f} m from the box' + ('' if walls_ok else ' (wall)'))
+            self._backoff_stop()
+            return True
+        c, s = math.cos(pose[2]), math.sin(pose[2])
+        v = b['speed']
+        self.nav.nudge(v * (c * ux + s * uy), v * (-s * ux + c * uy))
+        self.backoff_on = True
+        return False
+
+    def _backoff_stop(self):
+        if getattr(self, 'backoff_on', False):
+            self.nav.nudge(0.0, 0.0)
+            self.backoff_on = False
+
     def _fine_stop(self):
         if self.fine_on:
             self.nav.nudge(0.0, 0.0)
@@ -155,8 +188,10 @@ class NavigationTask:
         """Call ~10 times a second. remaining: zone names the refbox still wants
         (None if no routes received yet). pose: (x, y, yaw) in the map frame."""
         if not game_on:
-            if self.state in (RED_ZONE, DRIVE, DWELL):
+            if self.state in (RED_ZONE, DRIVE, DWELL, BACKOFF):
                 self.nav.cancel()
+                self._fine_stop()
+                self._backoff_stop()
                 self.log('Game stopped, robot stopped')
                 self.target = None
                 self._set(WAIT_GAME, now)
@@ -238,12 +273,22 @@ class NavigationTask:
                 self._retry(pose, now)
             return self.info()
 
+        if self.state == BACKOFF:
+            if self._backoff_step(now, pose):
+                self._set(PICK, now)
+            return self.info()
+
         if self.state == DWELL:
             if self.fine:
                 self._fine_step(now, pose)
             if self.target not in remaining:
                 self._fine_stop()
+                box = self.target in self.blocked and self.field.center(self.target)
                 self._visited(now)
+                if self.backoff and box and math.dist(pose[:2], box) < self.backoff['dist']:
+                    self.backoff_from = box
+                    self.log(f'{math.dist(pose[:2], box):.2f} m from the box: backing off before the next drive')
+                    self._set(BACKOFF, now)
             elif not self.field.inside(self.target, pose[0], pose[1], margin=0.02):
                 self.log(f'Drifted out of {self.target}, driving back')
                 self._drive_to(self.target, pose, now)

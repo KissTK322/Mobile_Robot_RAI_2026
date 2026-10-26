@@ -205,6 +205,8 @@ class NavigationChallengeNode(Node):
             # fine approach during the dwell (see NavigationTask._fine_step); off by default
             ('fine_approach', False), ('fine_tol', 0.03), ('fine_gain', 1.0), ('fine_vmax', 0.08),
             ('fine_vmin', 0.03), ('fine_time', 3.0), ('fine_topic', '/cmd_vel_nav'),
+            # slide away from an MPS box after its zone is counted (see NavigationTask.backoff)
+            ('box_backoff', True), ('backoff_dist', 0.50), ('backoff_speed', 0.06), ('backoff_time', 4.0),
         ])
         g = {x.name: x.value for x in p}
         self.cfg = g
@@ -239,10 +241,11 @@ class NavigationChallengeNode(Node):
         # navigation.yaml (or the web app), so wait only for the lifecycle nodes to be active.
         wait_nav2_active(self.navigator, self.get_logger().info)
         fine, nudge = None, None
-        if g['fine_approach']:
+        if g['fine_approach'] or g['box_backoff']:
             # into the velocity smoother (soft limits) and then the collision monitor (safety)
             self.fine_pub = self.create_publisher(TwistStamped, g['fine_topic'], 10)
-            fine = {k: g['fine_' + k] for k in ('tol', 'gain', 'vmax', 'vmin', 'time')}
+            if g['fine_approach']:
+                fine = {k: g['fine_' + k] for k in ('tol', 'gain', 'vmax', 'vmin', 'time')}
 
             def nudge(vx, vy):
                 m = TwistStamped()
@@ -255,7 +258,8 @@ class NavigationChallengeNode(Node):
             log=self.get_logger().info,
             red_zone=g['red_zone'], dwell=g['dwell'], confirm_timeout=g['confirm_timeout'],
             drive_timeout=g['drive_timeout'], retries=g['retries'], order=g['order'],
-            grid_tries=g['grid_tries'], stuck_time=g['stuck_time'], stuck_dist=g['stuck_dist'], fine=fine)
+            grid_tries=g['grid_tries'], stuck_time=g['stuck_time'], stuck_dist=g['stuck_dist'], fine=fine,
+            backoff={k: g['backoff_' + k] for k in ('dist', 'speed', 'time')} if g['box_backoff'] else None)
         self.router = None
         if g['route_mode'] in ('grid', 'lanes'):
             # The router goes live only once the map is in: without the walls it would

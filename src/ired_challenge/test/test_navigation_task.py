@@ -495,3 +495,54 @@ def test_fine_approach_off_without_param_or_nudge():
     fine = {'tol': 0.03, 'gain': 1.0, 'vmax': 0.08, 'vmin': 0.03, 'time': 3.0}
     assert NavigationTask(FakeNavNudge(), F, log=lambda *_: None).fine is None       # param off
     assert NavigationTask(NoNudge(), F, log=lambda *_: None, fine=fine).fine is None  # nav cannot nudge
+
+
+BACKOFF = {'dist': 0.50, 'speed': 0.06, 'time': 4.0}
+
+
+def box_dwell(nav, backoff=BACKOFF, pose=(2.20, 2.26, math.pi)):
+    """Robot dwelling in C_Z33 (box at its centre) at the 2026-10-26 robot stop point."""
+    t = NavigationTask(nav, F, log=lambda *_: None, order='given', blocked_zones=['C_Z33'], backoff=backoff)
+    t.red_done = True
+    t._set('PICK', 0.0)
+    t.update(0.0, True, ['C_Z33', 'C_Z34'], (2.0, 1.5, math.pi))
+    nav.last = 'succeeded'
+    t.update(0.1, True, ['C_Z33', 'C_Z34'], pose)
+    assert t.state == 'DWELL'
+    t.update(6.0, True, ['C_Z34'], pose)                     # refbox counted C_Z33
+    return t
+
+
+def test_backoff_slides_straight_away_from_the_box_then_picks():
+    nav = FakeNavNudge()
+    t = box_dwell(nav)
+    assert t.state == 'BACKOFF' and 'C_Z33' in t.visited
+    t.update(6.1, True, ['C_Z34'], (2.20, 2.26, math.pi))
+    vx, vy = nav.nudges[-1]
+    # away from (2.5, 2.5) is (-0.30, -0.24) in the field; robot faces -x, so +x and +y robot
+    assert vx > 0 and vy > 0 and math.hypot(vx, vy) == pytest.approx(0.06)
+    t.update(7.0, True, ['C_Z34'], (2.12, 2.14, math.pi))     # 0.50 m from the box centre
+    assert t.state == 'PICK' and nav.nudges[-1] == (0.0, 0.0)
+
+
+def test_backoff_gives_up_after_its_time_and_near_walls():
+    nav = FakeNavNudge()
+    t = box_dwell(nav)
+    t.update(6.1, True, ['C_Z34'], (2.20, 2.26, math.pi))
+    t.update(10.5, True, ['C_Z34'], (2.20, 2.26, math.pi))    # stuck: time is up
+    assert t.state == 'PICK' and nav.nudges[-1] == (0.0, 0.0)
+    # box in C_Z12 with the robot towards the wall side: the next 0.3 m would reach the wall
+    nav = FakeNavNudge()
+    t = NavigationTask(nav, F, log=lambda *_: None, blocked_zones=['C_Z12'], backoff=BACKOFF)
+    t.backoff_from, t.state, t.t_state = F.center('C_Z12'), 'BACKOFF', 0.0
+    t.update(0.1, True, ['C_Z34'], (0.20, 1.5, 0.0))
+    assert t.state == 'PICK'
+
+
+def test_no_backoff_when_far_from_the_box_or_off():
+    nav = FakeNavNudge()
+    t = box_dwell(nav, pose=(2.08, 2.10, math.pi))           # 0.58 m from the box centre
+    assert t.state == 'PICK'
+    nav = FakeNavNudge()
+    t = box_dwell(nav, backoff=None)
+    assert t.state == 'PICK' and not nav.nudges
