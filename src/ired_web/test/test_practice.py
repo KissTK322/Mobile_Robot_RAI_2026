@@ -201,11 +201,11 @@ def test_bridge_compass_yaw_and_retained_pose():
     received=[];link=PracticeMQTT.__new__(PracticeMQTT)
     link.game=SimpleNamespace(on_pose=lambda *p:received.append(p))
     for yaw in (90,270,0):
-        link.on_message(None,None,SimpleNamespace(retain=False,payload=json.dumps({'x':4.5,'y':.5,'yaw':yaw}).encode()))
+        link.on_message(None,None,SimpleNamespace(topic='ired-practice/pose',retain=False,payload=json.dumps({'x':4.5,'y':.5,'yaw':yaw}).encode()))
     assert received[0][2]==pytest.approx(-math.pi)
     assert received[1][2]==pytest.approx(0)
     assert received[2][2]==pytest.approx(-math.pi/2)
-    link.on_message(None,None,SimpleNamespace(retain=True,payload=b'{"x":4.5,"y":0.5,"yaw":90}'))
+    link.on_message(None,None,SimpleNamespace(topic='ired-practice/pose',retain=True,payload=b'{"x":4.5,"y":0.5,"yaw":90}'))
     assert len(received)==3
 
 
@@ -224,3 +224,78 @@ def test_expired_practice_lease_cancels_even_without_tf():
                          task=SimpleNamespace(nav=SimpleNamespace(cancel=lambda:cancelled.append(True))))
     NavigationChallengeNode.step(fake)
     assert cancelled and lease.tripped
+
+
+# ---------------------------------------------------------------- exploration
+from ired_web.practice import score_report
+
+
+@pytest.fixture
+def exp(tmp_path):
+    clock = Clock(); sent = []; halted = []
+    game = PracticeGame(tmp_path, lambda t,p: sent.append((t,p)), lambda: [], halted.append, clock, clock)
+    game.prepare({'mode': 'exploration', 'n': 2, 'seed': 5, 'limit_s': 600, 'countdown_s': 3})
+    return game, clock, sent, halted, []
+
+
+def centre(m):
+    return int(m['zone'][3])-.5, int(m['zone'][4])-.5
+
+
+def test_score_report_points():
+    truth = {'zone': 'C_Z23', 'rotation': 90}
+    assert score_report(truth, 1.5, 2.5, 92)['points'] == 5.5
+    assert score_report(truth, 1.5, 2.5, 180)['points'] == 1.5
+    assert score_report(truth, 2.5, 2.5, 90)['points'] == -2
+    assert score_report(None, 1.5, 2.5, 90)['points'] == -2
+    assert score_report({'zone': 'C_Z23', 'rotation': 0}, 1.2, 2.9, 358)['rotation_ok']
+
+
+def test_exploration_layout_has_no_route_and_only_bs_cs1():
+    cfg = generate_layout({'mode': 'exploration', 'n': 2, 'seed': 3})
+    assert cfg['route'] == [] and sorted(m['name'] for m in cfg['machines']) == ['C-BS', 'C-CS1']
+    with pytest.raises(ValueError):
+        validate_layout(dict(cfg, n=3))
+    with pytest.raises(ValueError):
+        validate_layout(dict(cfg, mode='race'))
+
+
+def test_exploration_publishes_no_ground_truth(exp):
+    g,c,s,h,_ = exp
+    begin(exp)
+    running = [p for t,p in s if t in ('private/machine_info','private/navigation_routes')]
+    assert running and all(json.loads(p) == {} for p in running)
+
+
+def test_exploration_first_report_counts_and_finishes(exp):
+    g,c,s,h,_ = exp
+    begin(exp)
+    bs, cs = sorted(g.config['machines'], key=lambda m: m['name'])
+    x, y = centre(bs)
+    assert g.on_report('C-BS', x, y, bs['rotation'])['points'] == 5.5
+    assert g.on_report('C-BS', 0.5, 0.5, 0) is None          # only the first report counts
+    assert g.score() == 5.5 and g.state == 'running'
+    g.on_report('C-CS1', 4.5, 4.5, (cs['rotation']+90) % 360)
+    g.tick()
+    assert g.state == 'finished' and len(g.reports) == 2
+
+
+def test_exploration_negative_total_is_zero_and_report_before_start_ignored(exp):
+    g,c,s,h,_ = exp
+    assert g.on_report('C-BS', 1.5, 1.5, 0) is None
+    begin(exp)
+    bs = next(m for m in g.config['machines'] if m['name'] == 'C-BS')
+    wrong = next(z for z in ('C_Z11', 'C_Z55') if z != bs['zone'])
+    g.on_report('C-BS', int(wrong[3])-.5, int(wrong[4])-.5, 0)
+    g.on_report('C-XX', 0.5, 0.5, 0)
+    assert sum(r['points'] for r in g.reports.values()) == -4 and g.score() == 0
+
+
+def test_bridge_dispatches_machine_report():
+    from types import SimpleNamespace
+    from ired_web.practice_runtime import PracticeMQTT
+    got=[];link=PracticeMQTT.__new__(PracticeMQTT)
+    link.game=SimpleNamespace(on_report=lambda *a:got.append(a), on_pose=lambda *a:got.append(('pose',)+a))
+    link.on_message(None,None,SimpleNamespace(topic='ired-practice/machine_report',retain=False,
+                    payload=json.dumps({'machine':'C-BS','x':1.5,'y':2.5,'yaw':90}).encode()))
+    assert got == [('C-BS',1.5,2.5,90)]

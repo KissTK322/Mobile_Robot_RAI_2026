@@ -83,6 +83,8 @@ class FakePractice:
         elif action == 'prepare': self.game.prepare(body)
         elif action == 'start': self.game.start(body.get('layout_id'), body.get('confirmed', False))
         elif action == 'stop': self.game.stop()
+        # demo only: what the robot's exploration machine_report would send over MQTT
+        elif action == 'report': self.game.on_report(body.get('machine'), body.get('x'), body.get('y'), body.get('yaw'))
         else: raise ValueError('Unknown practice action')
         return self.status()
 

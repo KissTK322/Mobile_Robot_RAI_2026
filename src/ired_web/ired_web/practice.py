@@ -19,6 +19,21 @@ START = {'C_Z31', 'C_Z41', 'C_Z51'}
 KINDS = {2: ['C-BS', 'C-CS1'], 3: ['C-BS', 'C-CS1', 'C-RS1'],
          4: ['C-BS', 'C-CS1', 'C-RS1', 'C-RS2']}
 ACTIVE = {'countdown', 'running'}
+MODES = ('navigation', 'exploration')
+# Exploration (FinalProject_ExampleChallenge.pdf p23-24): BS + CS1, no route, no ground truth sent;
+# per machine +3.5 zone right (+2 more with the rotation right), -2 zone wrong; only the first
+# report per machine counts; a negative total becomes 0.
+EXPLORATION_KINDS = ['C-BS', 'C-CS1']
+
+
+def score_report(truth, x, y, yaw_deg):
+    """Zone/rotation the way the course bridge computes them (as refbox_lite)."""
+    zone = f"{'M' if x < 0 else 'C'}_Z{int(math.floor(abs(x) + 1))}{int(math.floor(y)) + 1}"
+    rot = min([0, 45, 90, 135, 180, 225, 270, 315, 360], key=lambda a: abs(a - (yaw_deg % 360))) % 360
+    pos_ok = truth is not None and truth['zone'] == zone
+    rot_ok = pos_ok and truth['rotation'] % 360 == rot
+    return {'zone': zone, 'rotation': rot, 'zone_ok': pos_ok, 'rotation_ok': rot_ok,
+            'points': (3.5 + (2 if rot_ok else -2)) if pos_ok else -2.0}
 
 
 def integer(value, low, high, label):
@@ -41,7 +56,12 @@ def validate_layout(config):
     from ired_challenge.exploration import allowed_rotations
     if not isinstance(config, dict):
         raise ValueError('Expected a layout object')
+    mode = config.get('mode', 'navigation')
+    if mode not in MODES:
+        raise ValueError('Mode must be navigation or exploration')
     n = integer(config.get('n', 2), 2, 4, 'Box count')
+    if mode == 'exploration' and n != 2:
+        raise ValueError('Exploration uses 2 boxes (BS and CS1)')
     seed = integer(config.get('seed', 1), 0, 2147483647, 'Seed')
     limit = integer(config.get('limit_s', 600), 60, 1800, 'Game duration')
     countdown = integer(config.get('countdown_s', 5), 3, 30, 'Countdown')
@@ -64,9 +84,13 @@ def validate_layout(config):
         kind = m['name'].split('-')[1].rstrip('12')
         cleaned.append({'name': m['name'], 'type': kind, 'zone': zone,
                         'rotation': angle, 'state': 'IDLE', 'teamColor': 'CYAN'})
-    if not isinstance(route, list) or len(route) != 12 or not all(isinstance(z, str) and z in ZONES and z not in START for z in route) or len(set(route)) != 12:
+    if mode == 'exploration':
+        if route not in (None, []):
+            raise ValueError('Exploration has no route')
+        route = []
+    elif not isinstance(route, list) or len(route) != 12 or not all(isinstance(z, str) and z in ZONES and z not in START for z in route) or len(set(route)) != 12:
         raise ValueError('Route must have 12 unique target zones outside START')
-    return {'n': n, 'seed': seed, 'limit_s': limit, 'countdown_s': countdown,
+    return {'mode': mode, 'n': n, 'seed': seed, 'limit_s': limit, 'countdown_s': countdown,
             'machines': cleaned, 'route': list(route)}
 
 
@@ -84,8 +108,9 @@ def generate_layout(config):
             zone = rng.choice(options)
             machines.append({'name': name, 'zone': zone, 'rotation': rng.choice(allowed_rotations(zone, name))})
         if len(machines) == n:
+            exploring = config.get('mode') == 'exploration'
             return validate_layout(dict(config, n=n, seed=seed, machines=machines,
-                                        route=rng.sample([z for z in ZONES if z not in START], 12)))
+                                        route=[] if exploring else rng.sample([z for z in ZONES if z not in START], 12)))
     raise ValueError('Could not generate a valid layout; try a different seed')
 
 
@@ -112,6 +137,7 @@ class PracticeGame:
         self.started = None
         self.message = ''
         self.final_elapsed = None
+        self.reports = {}                       # exploration: machine -> scored first report
         # Recover durable evidence, never resume motion or a countdown after restart.
         for path in self.folder.glob('run-*.json'):
             try:
@@ -180,6 +206,7 @@ class PracticeGame:
             self.state, self.message = 'prepared', 'Place the boxes, then start when ready.'
             self.run_id, self.started, self.final_elapsed = None, None, None
             self.remaining, self.done_at, self.inside = list(config['route']), {}, {}
+            self.reports = {}
             return self.snapshot()
 
     def start(self, layout_id, confirmed=False):
@@ -245,8 +272,12 @@ class PracticeGame:
                     self.inside.clear()
                     self.message = 'Game running'
                     self._record()
-                elif self.state == 'running' and (not self.remaining or self.clock()-self.started >= self.config['limit_s']):
-                    self.stop('All targets counted' if not self.remaining else 'Time limit reached', finished=True)
+                elif self.state == 'running' and self.clock()-self.started >= self.config['limit_s']:
+                    self.stop('Time limit reached', finished=True)
+                elif self.state == 'running' and self.mode() == 'navigation' and not self.remaining:
+                    self.stop('All targets counted', finished=True)
+                elif self.state == 'running' and self.mode() == 'exploration' and len(self.reports) >= len(self.config['machines']):
+                    self.stop('Every machine reported', finished=True)
             self._publish()
 
     def stop(self, reason='Stopped from the Game page', error=False, finished=False):
@@ -267,19 +298,47 @@ class PracticeGame:
                         self.halt(reason)
             return self.snapshot()
 
+    def mode(self):
+        return (self.config or {}).get('mode', 'navigation')
+
+    def score(self):
+        if self.mode() != 'exploration':
+            return None
+        return max(0.0, sum(r['points'] for r in self.reports.values()))
+
+    def on_report(self, machine, x, y, yaw_deg):
+        """A machine_report from the robot (exploration). Only the first one per machine counts,
+        only while running, unknown names score as a wrong position like the course refbox."""
+        with self.lock:
+            if self.state != 'running' or self.mode() != 'exploration':
+                return None
+            if not isinstance(machine, str) or machine in self.reports or len(self.reports) >= 8:
+                return None
+            if not all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in (x, y, yaw_deg)):
+                return None
+            truth = next((m for m in self.config['machines'] if m['name'] == machine), None)
+            r = score_report(truth, float(x), float(y), float(yaw_deg))
+            r.update(at_s=round(self.clock()-self.started, 1), x=round(x, 3), y=round(y, 3), yaw=round(yaw_deg, 1))
+            self.reports[machine] = r
+            self._record()
+            return r
+
     def _record(self):
         self._write(f'run-{self.run_id}.json', {
             'id': self.run_id, 'layout_id': self.layout_id, 'config': self.config,
             'state': self.state, 'reason': self.message, 'saved_at': self.wall(),
             'elapsed_s': round(self.final_elapsed if self.final_elapsed is not None else max(0, self.clock()-self.started) if self.started is not None else 0, 2),
-            'counted': len(self.done_at), 'done_at': self.done_at, 'remaining': self.remaining})
+            'counted': len(self.done_at), 'done_at': self.done_at, 'remaining': self.remaining,
+            'mode': self.mode(), 'reports': self.reports, 'score': self.score()})
 
     def _publish(self):
         running = self.state == 'running'
+        nav = self.mode() == 'navigation'
         # Send metadata first; RUNNING is last, so subscribers have field data before moving.
+        # Exploration: like the course config (send-mps-ground-truth: []), no boxes and no route.
         messages = {'teamColor': 'CYAN', 'phase': 'PRODUCTION' if running else 'SETUP',
-                    'private/machine_info': {'teamColor': 'CYAN', 'machines': self.config['machines']} if running else {},
-                    'private/navigation_routes': {'teamColor': 'CYAN', 'routes': [{'id': 1, 'route': self.config['route'], 'remaining': list(self.remaining)}]} if running else {},
+                    'private/machine_info': {'teamColor': 'CYAN', 'machines': self.config['machines']} if running and nav else {},
+                    'private/navigation_routes': {'teamColor': 'CYAN', 'routes': [{'id': 1, 'route': self.config['route'], 'remaining': list(self.remaining)}]} if running and nav else {},
                     'game_state': 'RUNNING' if running else 'WAIT_START' if self.state in ('idle', 'prepared', 'countdown') else 'PAUSED'}
         for topic, payload in messages.items():
             self.publish(topic, json.dumps(payload) if isinstance(payload, dict) else payload)
@@ -288,7 +347,8 @@ class PracticeGame:
         with self.lock:
             now = self.clock()
             elapsed = self.final_elapsed if self.final_elapsed is not None else max(0, now-self.started) if self.started is not None else 0
-            return copy.deepcopy({'state': self.state, 'message': self.message, 'layout_id': self.layout_id,
+            return copy.deepcopy({'mode': self.mode(), 'reports': self.reports, 'score': self.score(),
+                                  'state': self.state, 'message': self.message, 'layout_id': self.layout_id,
                                   'config': self.config, 'run_id': self.run_id, 'remaining': self.remaining,
                                   'counted': len(self.done_at), 'elapsed_s': round(elapsed, 1),
                                   'countdown_left': max(0, math.ceil(self.deadline-now)) if self.state == 'countdown' else None,

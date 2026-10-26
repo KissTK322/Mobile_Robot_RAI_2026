@@ -443,6 +443,7 @@ class Manager:
             def scan(msg):
                 self.game_scan_at = time.monotonic()
             self.game_subs = [self.node.create_subscription(String, '/challenge/navigation/state', nav, 10),
+                              self.node.create_subscription(String, '/challenge/exploration/state', nav, 10),
                               self.node.create_subscription(LaserScan, '/scan_filtered', scan, qos_profile_sensor_data, raw=True)]
         elif not on and self.game_subs:
             for sub in self.game_subs:
@@ -450,6 +451,14 @@ class Manager:
             self.game_subs = []
             self.clear_practice_feedback()
             self.game_scan_at = 0.0
+
+    def challenge_profile(self):
+        """The challenge program for the prepared practice game (exploration or navigation)."""
+        return 'challenge_exp' if self.practice.game.mode() == 'exploration' else 'challenge_nav'
+
+    def stop_challenges(self):
+        for name in ('challenge_nav', 'challenge_exp'):
+            self.profiles[name].stop()
 
     def practice_readiness(self):
         reasons = []
@@ -459,14 +468,17 @@ class Manager:
             reasons.append('Waiting for navigation to stop')
         if self.profiles['robot'].info()['state'] != 'running':
             reasons.append('Start Robot on Launch')
-        if not any(self.profiles[n].info()['state'] == 'running' for n in ('navigation', 'navigation_omni', 'navigation_softstop')):
+        if not any(n.startswith('navigation') and p.info()['state'] == 'running' for n, p in self.profiles.items()):
             reasons.append('Start Navigation (soft-stop) on Launch')
-        if self.profiles['challenge_nav'].info()['state'] != 'running':
+        exploring = self.challenge_profile() == 'challenge_exp'
+        if exploring and self.profiles['camera'].info()['state'] != 'running':
+            reasons.append('Start Camera + ArUco on Launch (exploration)')
+        if self.profiles[self.challenge_profile()].info()['state'] != 'running':
             reasons.append('Practice challenge is not running')
         if self.game_nav.get('practice_watchdog_ok') is False:
             reasons.append('Practice heartbeat lease expired; prepare a new round')
         if time.monotonic()-self.game_nav_at > 3:
-            reasons.append('Waiting for live Navigation challenge state')
+            reasons.append('Waiting for live challenge state')
         if time.monotonic()-self.game_scan_at > 2:
             reasons.append('Waiting for live LiDAR')
         return reasons
@@ -485,7 +497,7 @@ class Manager:
             failed = not futures or any(not f.done() or f.exception() is not None for f in futures)
             if failed or self.practice.game.state == 'error':
                 self.node.estop = True
-            self.profiles['challenge_nav'].stop()
+            self.stop_challenges()
         finally:
             self.practice_stopping = False
 
@@ -660,7 +672,7 @@ class Manager:
             add('start', 'Start pose C_Z51', 'ok' if ok else 'warn',
                 f'({x:.2f}, {y:.2f}) {d * 100:.0f} cm / {dyaw:.0f} deg from the start',
                 '' if ok else 'Put the robot on C_Z51 facing C_Z41, Map page: "Robot is at C_Z51"')
-        chal = running('challenge_nav')
+        chal = running('challenge_nav') or running('challenge_exp')
         add('challenge', 'Challenge program + refbox', 'ok' if chal else 'warn',
             f"source {getattr(self.practice, 'source', '?')}, challenge {'running' if chal else 'stopped'}",
             '' if chal else 'Game page: Prepare (practice) or Launch: Challenge: Navigation (field refbox)')

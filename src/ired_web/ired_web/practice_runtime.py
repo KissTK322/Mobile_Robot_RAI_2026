@@ -31,6 +31,7 @@ class PracticeMQTT:
             # A broker reconnect never resumes an old game.
             client.publish(f'{self.topic}/game_state', 'PAUSED', qos=1)
             client.subscribe(f'{self.topic}/pose', qos=0)
+            client.subscribe(f'{self.topic}/machine_report', qos=1)
             self.connected = True
 
     def on_disconnect(self, *args):
@@ -44,6 +45,10 @@ class PracticeMQTT:
             return
         try:
             p = json.loads(message.payload)
+            if message.topic.endswith('/machine_report'):
+                # exploration: ired_refbox bridge sends {machine, x, y, yaw} with yaw in degrees
+                self.game.on_report(p['machine'], p['x'], p['y'], p['yaw'])
+                return
             # Existing ired_refbox bridge publishes compass degrees: 270 - ROS yaw.
             yaw = math.radians((270.0-float(p['yaw'])) % 360.0)
             yaw = (yaw+math.pi) % (2*math.pi)-math.pi
@@ -124,7 +129,7 @@ class PracticeController:
                 action()
             except Exception as e:
                 self.error = str(e)
-                self.manager.profiles['challenge_nav'].stop()
+                self.manager.stop_challenges()
                 if self.link:
                     self.link.close()
                     self.link = None
@@ -142,7 +147,7 @@ class PracticeController:
                 raise ValueError('Practice worker failed; restart web manager before reconnecting')
             def connect():
                 # Stop the previous subscriber before switching its broker address.
-                self.manager.profiles['challenge_nav'].stop()
+                self.manager.stop_challenges()
                 if self.link:
                     self.link.close()
                     self.link = None
@@ -152,7 +157,7 @@ class PracticeController:
                     if self.manager.node.estop:
                         raise ValueError('Release STOP before connecting practice')
                     running = self.manager.profiles['robot'].info()['state'] == 'running'
-                    nav = any(self.manager.profiles[n].info()['state'] == 'running' for n in ('navigation', 'navigation_omni', 'navigation_softstop'))
+                    nav = any(n.startswith('navigation') and p.info()['state'] == 'running' for n, p in self.manager.profiles.items())
                     if not running or not nav:
                         raise ValueError('Start Robot and a Navigation profile on Launch first')
                     broker = self.manager.profiles['practice_broker']
@@ -174,7 +179,7 @@ class PracticeController:
                             time.sleep(.1)
                     self.game.pose_at = None
                     self.game.tick()  # send only WAIT_START/PAUSED, never RUNNING
-                    self.manager.start('challenge_nav')
+                    self.manager.start(self.manager.challenge_profile())
                 else:
                     self.manager.profiles['practice_broker'].stop()
                     # Field mode uses the original configured remote broker and manual Launch.
@@ -189,10 +194,10 @@ class PracticeController:
             # Every new round needs a fresh NavigationTask: DONE/red-zone/visited are per game.
             if self.source == 'practice' and self.link and self.link.connected:
                 def rearm():
-                    self.manager.profiles['challenge_nav'].stop()
+                    self.manager.stop_challenges()
                     self.game.pose_at = None
                     self.manager.clear_practice_feedback()
-                    self.manager.start('challenge_nav')
+                    self.manager.start(self.manager.challenge_profile())
                 self.background(rearm)
             return result
 

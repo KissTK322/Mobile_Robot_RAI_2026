@@ -54,6 +54,13 @@ profiles:
     # REFBOX_BRIDGE_ADDRESS = the MQTT broker (refbox bridge, or refbox_lite on the PC); ROBOT_IP = this robot
     command: bash -c 'export REFBOX_BRIDGE_ADDRESS={game_refbox_address} ROBOT_IP={game_robot_topic}; ros2 run ired_refbox mqtt_refbox & exec ros2 launch ired_challenge navigation_challenge.launch.py practice_watchdog:={practice_watchdog}'
     requires: [robot]
+    conflicts: [challenge_exp]
+  challenge_exp:
+    title: "Challenge: Exploration"
+    description: Refbox bridge + exploration challenge program (finds C-BS and C-CS1 with the camera and reports them; start Camera + ArUco and a Navigation profile first)
+    command: bash -c 'export REFBOX_BRIDGE_ADDRESS={game_refbox_address} ROBOT_IP={game_robot_topic}; ros2 run ired_refbox mqtt_refbox & exec ros2 run ired_challenge exploration_challenge --ros-args -p practice_watchdog:={practice_watchdog}'
+    requires: [robot]
+    conflicts: [challenge_nav]
   record:
     title: Record (rosbag)
     description: Records driving data to ~/bags while Navigation runs (for finding why the robot stalls)

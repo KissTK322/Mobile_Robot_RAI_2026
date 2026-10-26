@@ -4,7 +4,8 @@ const PRACTICE = { info: null, layout: null, dirty: false, pending: false, histo
 const rb = (id) => document.getElementById('refbox-' + id);
 const rbError = (e) => { rb('message').textContent = String(e.message || e).replace(/^http \d+: /, ''); };
 function rbSettings() {
-  const out = { n: Number(rb('boxes').value), limit_s: Number(rb('duration').value), countdown_s: Number(rb('countdown').value) };
+  const mode = rb('mode').value;
+  const out = { mode, n: mode === 'exploration' ? 2 : Number(rb('boxes').value), limit_s: Number(rb('duration').value), countdown_s: Number(rb('countdown').value) };
   if (rb('seed').value !== '') out.seed = Number(rb('seed').value);
   return out;
 }
@@ -40,6 +41,20 @@ function rbMachineRows(config) {
     row.append(name,zone,angle); return row;
   }));
 }
+function rbReports(d) {
+  // Exploration result per machine: what the robot reported vs the real box
+  const rows=d.config.machines.map(m=>{
+    const r=(d.reports || {})[m.name], p=document.createElement('p');
+    p.textContent=`${m.name} (real ${m.zone} ${m.rotation}°): `+(r ? `reported ${r.zone} ${r.rotation}° at ${r.at_s}s · ${r.zone_ok ? 'zone ✓' : 'zone ✗'}${r.zone_ok ? r.rotation_ok ? ' rotation ✓' : ' rotation ✗' : ''} · ${r.points > 0 ? '+' : ''}${r.points}` : 'not reported yet');
+    return p;
+  });
+  Object.entries(d.reports || {}).filter(([n])=>!d.config.machines.some(m=>m.name===n)).forEach(([n,r])=>{
+    const p=document.createElement('p'); p.textContent=`${n} (not on the field): ${r.points}`; rows.push(p);
+  });
+  const total=document.createElement('p'); total.innerHTML='<strong></strong>';
+  total.firstChild.textContent=`Score ${d.score} (negative total counts as 0)`;
+  rb('reports').replaceChildren(...rows,total);
+}
 function renderRefbox() {
   const d=PRACTICE.info;
   if (!d) return;
@@ -49,19 +64,26 @@ function renderRefbox() {
   if (d.layout_id !== PRACTICE.layout) {
     PRACTICE.layout=d.layout_id; PRACTICE.dirty=false; rb('confirm').checked=false;
     if (d.config) {
+      rb('mode').value=d.config.mode || 'navigation';
       rb('boxes').value=String(d.config.n); rb('duration').value=String(d.config.limit_s);
       rb('countdown').value=String(d.config.countdown_s); rb('seed').value=String(d.config.seed);
       rbMachineRows(d.config);
     }
   }
-  rb('route').textContent=d.config ? 'Targets: '+d.config.route.join(' · ') : 'Generate a field to see box positions and targets.';
+  const exploring=d.config && d.config.mode==='exploration';
+  rb('route').textContent=!d.config ? 'Generate a field to see box positions and targets.'
+    : exploring ? 'Exploration: the robot gets no box positions; it must find and report C-BS and C-CS1 (first report per box counts).'
+    : 'Targets: '+d.config.route.join(' · ');
+  rb('reports').hidden=!exploring;
+  if (exploring) rbReports(d);
   rb('readiness').textContent=d.source !== 'practice' ? 'Select Practice and connect to run a practice game. For the field refbox, start Challenge: Navigation on Launch.'
     : PRACTICE.dirty ? 'Field settings changed. Save the field, or generate a new field after changing the box count.'
     : d.ready_reasons.length ? d.ready_reasons.join(' · ')
     : d.state === 'prepared' ? 'Ready. Check the physical box positions and start pose, then press Start.' : d.message;
   rb('save').hidden=!PRACTICE.dirty;
   ['connect','generate','load','save'].forEach(k=>{rb(k).disabled=busy || active;});
-  ['source','boxes','duration','countdown','seed','saved'].forEach(k=>{rb(k).disabled=busy || active;});
+  ['source','mode','boxes','duration','countdown','seed','saved'].forEach(k=>{rb(k).disabled=busy || active;});
+  if (rb('mode').value==='exploration') { rb('boxes').value='2'; rb('boxes').disabled=true; }
   rb('layout').querySelectorAll('select').forEach(el=>{el.disabled=busy || active;});
   rb('confirm').disabled=active || busy;
   rb('start').textContent=d.state==='countdown' ? `Starting in ${d.countdown_left}…` : d.state==='running' ? 'Game running' : 'Start game — robot will move';
@@ -79,7 +101,8 @@ function renderRefbox() {
     PRACTICE.historyKey=historyKey;
     rb('history').replaceChildren(...d.history.map(run=>{
       const p=document.createElement('p'); p.className='small';
-      p.textContent=`${new Date(run.saved_at*1000).toLocaleString()} · ${run.config.n} boxes · ${run.state} · ${run.counted}/12 · ${run.elapsed_s}s · ${run.reason}`;return p;
+      const result=run.mode==='exploration' ? `exploration · ${Object.keys(run.reports || {}).length}/2 reported · ${run.score} pts` : `${run.config.n} boxes · ${run.counted}/12`;
+      p.textContent=`${new Date(run.saved_at*1000).toLocaleString()} · ${result} · ${run.state} · ${run.elapsed_s}s · ${run.reason}`;return p;
     }));
     if (!d.history.length) rb('history').textContent='No practice games yet.';
   }
@@ -93,7 +116,7 @@ rb('save').onclick=()=>{
   const machines=[...rb('layout').children].map(row=>({name:row.dataset.machine,zone:row.querySelectorAll('select')[0].value,rotation:Number(row.querySelectorAll('select')[1].value)}));
   rbAction('prepare',{...rbSettings(),seed:config.seed,machines,route:config.route});
 };
-['boxes','duration','countdown','seed'].forEach(k=>{rb(k).onchange=rbDirty;});
+['mode','boxes','duration','countdown','seed'].forEach(k=>{rb(k).onchange=rbDirty;});
 rb('confirm').onchange=renderRefbox;
 rb('start').onclick=()=>rbAction('start',{layout_id:PRACTICE.layout,confirmed:rb('confirm').checked});
 rb('stop').onclick=async()=>{
@@ -114,7 +137,9 @@ function renderPracticeGame() {
   const d=PRACTICE.info;
   if (!d || d.source!=='practice' || !d.config) return false;
   const remaining=d.remaining || [],visited=d.config.route.filter(z=>!remaining.includes(z));
-  $('#game-count').textContent=`${d.counted}/12`;
+  const exploring=d.config.mode==='exploration';
+  $('#game-count').textContent=exploring ? `${d.score}` : `${d.counted}/12`;
+  $('#game-count-label').textContent=exploring ? `points · ${Object.keys(d.reports || {}).length}/2 reported` : 'zones counted';
   const left=Math.max(0,Math.ceil(d.time_left_s));
   $('#game-time').textContent=`${Math.floor(left/60)}:${String(left%60).padStart(2,'0')}`;
   $('#game-duration-label').textContent=`left of ${Math.floor(d.config.limit_s/60)}:00`;
