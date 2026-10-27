@@ -28,6 +28,11 @@ navigation_challenge:
     stuck_time: 8.0          # s without moving stuck_dist -> retry, long before drive_timeout
     stuck_dist: 0.10
     route_legs: true         # send lanes/grid routes one straight piece at a time (sim: no stalls)
+    # fine approach during the dwell (PC sim 2026-10-26/27, quick start, 4 layouts: mean distance to the
+    # zone centre 6.2-7.2 -> 4.5-5.3 cm, same time, no contacts). false = old behaviour (plan B).
+    fine_approach: true
+    fine_tol: 0.02
+    fine_vmin: 0.02
 
 mps_obstacles:
   ros__parameters:
