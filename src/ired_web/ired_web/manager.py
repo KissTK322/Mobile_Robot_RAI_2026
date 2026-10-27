@@ -36,6 +36,7 @@ from std_msgs.msg import String
 from ired_msgs.msg import MotorData
 from ired_web.mapping import MapStore, MapWatch
 from ired_web.practice_runtime import PracticeController
+from ired_web.field_prep import FieldPrep
 
 SHARE = get_package_share_directory('ired_web')
 ROS_SETUP = 'source /opt/ros/jazzy/setup.bash && source ~/ros_environment.bash'
@@ -247,6 +248,74 @@ class TestJob:
                 'result': self.result, 'error': self.error, 'elapsed': round(time.time() - self.started)}
 
 
+class FieldPrepHub:
+    """What FieldPrep needs from the web manager (kept small so FieldPrep is testable on a PC)."""
+    NAV2 = ('controller_server', 'planner_server', 'bt_navigator')
+
+    def __init__(self, m):
+        self.m = m
+        self.state_clients = {}
+        self.pose_pub = None
+
+    def source(self):
+        return self.m.practice.source
+
+    def estop(self):
+        return self.m.node.estop
+
+    def running(self, name):
+        return self.m.profiles[name].info()['state'] == 'running'
+
+    def running_nav(self):
+        return next((n for n, p in self.m.profiles.items() if n.startswith('navigation') and p.info()['state'] == 'running'), None)
+
+    def start(self, name):
+        self.m.start(name)
+
+    def stop(self, name):
+        self.m.profiles[name].stop()
+
+    def rates(self):
+        self.m.viewed('ready')                  # keeps the needed topics and the pose watched
+        return self.m.node.rates()
+
+    def pose(self):
+        self.m.viewed('ready')
+        return self.m.node.mapwatch.pose()
+
+    def nav2_active(self):
+        """All Nav2 servers report lifecycle state active (a node can exist while unconfigured)."""
+        from lifecycle_msgs.srv import GetState
+        futures = []
+        for n in self.NAV2:
+            c = self.state_clients.get(n) or self.state_clients.setdefault(n, self.m.node.create_client(GetState, f'/{n}/get_state'))
+            if not c.service_is_ready():
+                return False
+            futures.append(c.call_async(GetState.Request()))
+        end = time.monotonic() + 2.0
+        while any(not f.done() for f in futures) and time.monotonic() < end:
+            time.sleep(0.05)
+        return all(f.done() and f.result() is not None and f.result().current_state.label == 'active' for f in futures)
+
+    def challenge_ready(self, mode):
+        self.m.viewed('game')
+        return bool(self.m.game_nav.get('state')) and time.monotonic() - self.m.game_nav_at < 3
+
+    def send_start_pose(self, x, y, yaw):
+        from geometry_msgs.msg import PoseWithCovarianceStamped
+        if self.pose_pub is None:
+            self.pose_pub = self.m.node.create_publisher(PoseWithCovarianceStamped, '/initialpose', 10)
+            time.sleep(1.0)                     # let AMCL discover the new publisher
+        msg = PoseWithCovarianceStamped()
+        msg.header.frame_id = 'map'             # stamp 0 = latest transform, like the Map page button
+        msg.pose.pose.position.x, msg.pose.pose.position.y = float(x), float(y)
+        msg.pose.pose.orientation.z, msg.pose.pose.orientation.w = math.sin(yaw / 2), math.cos(yaw / 2)
+        cov = [0.0] * 36
+        cov[0], cov[7], cov[35] = 0.04, 0.04, 0.03
+        msg.pose.covariance = cov
+        self.pose_pub.publish(msg)
+
+
 class WebNode(Node):
     """ROS side: topic rates, node list and the E-STOP zero-velocity publisher."""
 
@@ -410,6 +479,7 @@ class Manager:
         self.game_cancel_clients = [self.node.create_client(CancelGoal, path) for path in
                                     ('/navigate_to_pose/_action/cancel_goal', '/follow_path/_action/cancel_goal')]
         self.practice = PracticeController(os.path.join(cfg['log_dir'], 'practice'), self)
+        self.field_prep = FieldPrep(FieldPrepHub(self))
         for p in self.profiles.values():
             p.extra = self.profile_fields
 
@@ -556,11 +626,14 @@ class Manager:
             raise ValueError('Expected a JSON object')
         self.viewed('game')
         if action == 'status':
-            return dict(self.practice.status(), field_refbox=self.field_refbox_info())
+            return dict(self.practice.status(), field_refbox=self.field_refbox_info(), field_prep=self.field_prep.status())
         if action == 'field_refbox':
             return dict(self.practice.status(), field_refbox=self.set_field_refbox(body.get('address')))
         if action == 'field_test':
             return dict(self.practice.status(), field_refbox=self.field_refbox_info(test=True))
+        if action == 'field_prepare':
+            self.field_prep.start(body.get('mode', 'navigation'))
+            return dict(self.practice.status(), field_refbox=self.field_refbox_info(), field_prep=self.field_prep.status())
         if action == 'source':
             if self.game_nav.get('game_on') and time.monotonic()-self.game_nav_at < 3:
                 raise ValueError('Stop the current challenge before switching refbox source')
@@ -814,7 +887,7 @@ def make_handler(manager):
                 return self.send_json(200, {k: c[k] for k in ('rosbridge_port', 'video_port', 'foxglove_port')})
             if parts[:1] == ['practice']:
                 action = parts[1] if len(parts) == 2 else ''
-                if (method == 'GET' and action == 'status') or (method == 'POST' and action in ('source', 'prepare', 'start', 'stop', 'field_refbox', 'field_test')):
+                if (method == 'GET' and action == 'status') or (method == 'POST' and action in ('source', 'prepare', 'start', 'stop', 'field_refbox', 'field_test', 'field_prepare')):
                     try:
                         out = manager.practice_api(action, self.body_json() if method == 'POST' else {})
                     except (ValueError, TypeError) as e:

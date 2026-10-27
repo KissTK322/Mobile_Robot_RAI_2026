@@ -59,10 +59,28 @@ from ired_web.practice import PracticeGame, ACTIVE, KINDS, ZONES
 from ired_challenge.exploration import allowed_rotations
 
 
+class DemoHub:
+    """PC demo of the Game page 'Prepare field game' button: everything starts, Nav2 after ~3 s."""
+    def __init__(self, practice): self.p, self.on, self.checks, self.sent = practice, set(), 0, False
+    def source(self): return self.p.source
+    def estop(self): return False
+    def running(self, n): return n in self.on
+    def running_nav(self): return next((n for n in self.on if n.startswith('navigation')), None)
+    def start(self, n): time.sleep(0.5); self.on.add(n)
+    def stop(self, n): self.on.discard(n)
+    def rates(self): return {'/ired/motor/data': 10, '/scan_filtered': 7.2} if 'robot' in self.on else {}
+    def nav2_active(self): self.checks += 1; return self.checks >= 3
+    def challenge_ready(self, mode): return any(n.startswith('challenge') for n in self.on)
+    def send_start_pose(self, *p): self.sent = True
+    def pose(self): return (4.49, 0.48, math.pi) if self.sent else None
+
+
 class FakePractice:
     """Real rules/engine/persistence, fake connection and stationary pose only."""
     def __init__(self):
         self.source = 'field'
+        from ired_web.field_prep import FieldPrep
+        self.prep = FieldPrep(DemoHub(self))
         self.game = PracticeGame(os.path.join(TMP, 'practice'), lambda *a: None,
                                  lambda: [] if self.source == 'practice' else ['Select Practice first'])
 
@@ -72,7 +90,7 @@ class FakePractice:
         self.game.on_pose(4.5, .5, math.pi)
         self.game.tick()
         return dict(self.game.snapshot(), source=self.source, busy=False, error='',
-                    fake=True, broker_connected=self.source == 'practice', field_refbox=dict(self.field),
+                    fake=True, broker_connected=self.source == 'practice', field_refbox=dict(self.field), field_prep=self.prep.status(),
                     ready_reasons=[] if self.source == 'practice' else ['Select Practice first'],
                     layouts=self.game.saved(), history=self.game.history(),
                     placement_rules={name: {z: allowed_rotations(z, name) for z in ZONES if allowed_rotations(z, name)} for name in KINDS[4]})
@@ -88,6 +106,7 @@ class FakePractice:
         elif action == 'field_refbox':
             self.field = dict(self.field, address=(body.get('address') or '').strip() or self.field['default'])
             self.field.pop('broker_ok', None)
+        elif action == 'field_prepare': self.prep.start(body.get('mode', 'navigation'))
         elif action == 'field_test': self.field = dict(self.field, broker_ok=False, broker_error='PC demo: no broker')
         # demo only: what the robot's exploration machine_report would send over MQTT
         elif action == 'report': self.game.on_report(body.get('machine'), body.get('x'), body.get('y'), body.get('yaw'))

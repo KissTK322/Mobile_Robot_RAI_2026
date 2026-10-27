@@ -18,6 +18,7 @@ async function rbAction(action, body) {
     rb('message').textContent = action === 'source' ? 'Switching connection…'
       : action === 'field_refbox' ? `Field refbox broker: ${PRACTICE.info.field_refbox.address} (used from the next Challenge start)`
       : action === 'field_test' ? (PRACTICE.info.field_refbox.broker_ok ? 'Broker reachable' : 'Broker not reachable')
+      : action === 'field_prepare' ? 'Preparing the robot for the field game…'
       : PRACTICE.info.message;
     renderRefbox(); renderGame();
   } catch (e) { rbError(e); }
@@ -63,6 +64,7 @@ function renderRefbox() {
   if (!d) return;
   if (!PRACTICE.initialized) { rb('source').value=d.source; PRACTICE.initialized=true; }
   renderField(d);
+  renderFieldPrep(d);
   const active=['countdown','running'].includes(d.state), busy=PRACTICE.pending || d.busy;
   rb('connection').textContent = (d.fake ? 'PC demo · no robot motion · ' : '') + `${d.source === 'practice' ? 'Practice' : 'Field refbox'} · ${d.busy ? 'connecting…' : d.source === 'practice' ? d.broker_connected ? 'broker connected' : 'broker offline' : 'external connection via Launch'}` + (d.error ? ' · '+d.error : '');
   if (d.layout_id !== PRACTICE.layout) {
@@ -123,6 +125,20 @@ function renderField(d) {
   const busy=PRACTICE.pending || d.busy || ['countdown','running'].includes(d.state);
   ['field-address','field-save','field-test'].forEach(id=>{document.getElementById(id).disabled=busy;});
 }
+function renderFieldPrep(d) {
+  // One button: Robot -> Navigation (Nav2 really active) -> Challenge -> start pose C_Z51. Field source only.
+  const p=d.field_prep, list=document.getElementById('field-prep-steps');
+  const field=d.source==='field', busy=!!(p && p.busy) || PRACTICE.pending || d.busy;
+  ['field-prep-nav','field-prep-exp'].forEach(id=>{const b=document.getElementById(id); b.disabled=!field || busy; b.hidden=!field;});
+  if (!p || !p.steps || !p.steps.length) { list.hidden=true; return; }
+  list.hidden=false;
+  const mark={ok:'✅',bad:'❌',active:'⏳',pending:'·'};
+  const items=p.steps.map(st=>{const li=document.createElement('li'); li.textContent=`${mark[st.state]||''} ${st.label}${st.msg ? ' — '+st.msg : ''}`; return li;});
+  if (p.done) { const li=document.createElement('li'); li.textContent='Ready: robot waits on C_Z51. Referee: switch to Production (paused), place the boxes from the list below, then press play.'; items.push(li); }
+  list.replaceChildren(...items);
+}
+document.getElementById('field-prep-nav').onclick=()=>rbAction('field_prepare',{mode:'navigation'});
+document.getElementById('field-prep-exp').onclick=()=>rbAction('field_prepare',{mode:'exploration'});
 document.getElementById('field-save').onclick=()=>rbAction('field_refbox',{address:document.getElementById('field-address').value});
 document.getElementById('field-test').onclick=()=>rbAction('field_test',{});
 rb('connect').onclick=()=>rbAction('source',{source:rb('source').value});
