@@ -157,6 +157,13 @@
         </div>
         <p class="small" id="refbox-connection" role="status">Loading game controls…</p>
         <p class="small muted">Practice works from this phone without a PC. Field mode keeps the competition refbox connection.</p>
+        <div class="refbox-row" id="field-refbox">
+          <label for="field-address">Field refbox broker</label>
+          <input id="field-address" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="172.16.x.x">
+          <button class="btn" id="field-save">Save</button>
+          <button class="btn" id="field-test">Test connection</button>
+        </div>
+        <p class="small" id="field-info"></p>
         <div class="refbox-settings">
           <label>Mode<select id="refbox-mode" aria-label="Game mode"><option value="navigation">Navigation (12 zones)</option><option value="exploration">Exploration (find BS + CS1)</option></select></label>
           <label>Boxes<select id="refbox-boxes" aria-label="Boxes"><option value="2">2 boxes</option><option value="3">3 boxes</option><option value="4">4 boxes</option></select></label>

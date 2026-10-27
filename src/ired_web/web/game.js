@@ -15,7 +15,10 @@ async function rbAction(action, body) {
   try {
     PRACTICE.info = await api('practice/' + action, { method: 'POST', body });
     if (action === 'source') rb('confirm').checked = false;
-    rb('message').textContent = action === 'source' ? 'Switching connection…' : PRACTICE.info.message;
+    rb('message').textContent = action === 'source' ? 'Switching connection…'
+      : action === 'field_refbox' ? `Field refbox broker: ${PRACTICE.info.field_refbox.address} (used from the next Challenge start)`
+      : action === 'field_test' ? (PRACTICE.info.field_refbox.broker_ok ? 'Broker reachable' : 'Broker not reachable')
+      : PRACTICE.info.message;
     renderRefbox(); renderGame();
   } catch (e) { rbError(e); }
   finally { PRACTICE.pending = false; renderRefbox(); }
@@ -59,6 +62,7 @@ function renderRefbox() {
   const d=PRACTICE.info;
   if (!d) return;
   if (!PRACTICE.initialized) { rb('source').value=d.source; PRACTICE.initialized=true; }
+  renderField(d);
   const active=['countdown','running'].includes(d.state), busy=PRACTICE.pending || d.busy;
   rb('connection').textContent = (d.fake ? 'PC demo · no robot motion · ' : '') + `${d.source === 'practice' ? 'Practice' : 'Field refbox'} · ${d.busy ? 'connecting…' : d.source === 'practice' ? d.broker_connected ? 'broker connected' : 'broker offline' : 'external connection via Launch'}` + (d.error ? ' · '+d.error : '');
   if (d.layout_id !== PRACTICE.layout) {
@@ -107,6 +111,20 @@ function renderRefbox() {
     if (!d.history.length) rb('history').textContent='No practice games yet.';
   }
 }
+function renderField(d) {
+  // Field refbox: broker the robot connects to (the seniors' Bridge VM on the day) and the IP the
+  // bridge's TEAM_MAPPING CYAN must have. Saving only applies to the next Challenge start.
+  const f=d.field_refbox; if (!f) return;
+  const input=document.getElementById('field-address');
+  if (document.activeElement!==input && input.dataset.saved!==f.address) { input.value=f.address; input.dataset.saved=f.address; }
+  const test=f.broker_ok===undefined ? '' : f.broker_ok ? ' · broker reachable (port 1883)' : ' · broker NOT reachable: '+(f.broker_error||'');
+  document.getElementById('field-info').textContent=`Robot IP ${f.robot_ip||'?'}: the bridge's TEAM_MAPPING "CYAN" must be this IP.`
+    +(f.address!==f.default ? ` (web.yaml default ${f.default}; clear the box and Save to go back)` : '')+test;
+  const busy=PRACTICE.pending || d.busy || ['countdown','running'].includes(d.state);
+  ['field-address','field-save','field-test'].forEach(id=>{document.getElementById(id).disabled=busy;});
+}
+document.getElementById('field-save').onclick=()=>rbAction('field_refbox',{address:document.getElementById('field-address').value});
+document.getElementById('field-test').onclick=()=>rbAction('field_test',{});
 rb('connect').onclick=()=>rbAction('source',{source:rb('source').value});
 rb('generate').onclick=()=>rbAction('prepare',rbSettings());
 rb('load').onclick=()=>{if (!rb('saved').value) {rb('message').textContent='Select a saved layout first.';return;} const body=rbSettings();delete body.n;delete body.seed;rbAction('prepare',{...body,layout_id:rb('saved').value});};

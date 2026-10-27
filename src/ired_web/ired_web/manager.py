@@ -11,7 +11,9 @@ import io
 import json
 import math
 import os
+import re
 import signal
+import socket
 import subprocess
 import threading
 import time
@@ -414,9 +416,56 @@ class Manager:
     def profile_fields(self):
         local = self.practice.source == 'practice'
         return {'map_name': self.maps.active(),
-                'game_refbox_address': '127.0.0.1' if local else self.cfg['refbox_address'],
+                'game_refbox_address': '127.0.0.1' if local else self.field_refbox(),
                 'game_robot_topic': 'ired-practice' if local else self.cfg['game_robot_topic'],
                 'practice_watchdog': 'true' if local else 'false'}
+
+    # ---------------------------------------------------------- field refbox address
+    # The refbox bridge broker changes with the place (lab PC, seniors' Bridge VM, competition
+    # day). web.yaml refbox_address is the default; the Game page can override it without
+    # editing files on the robot. The override lives in log_dir and survives restarts.
+    def field_refbox(self):
+        try:
+            with open(os.path.join(self.cfg['log_dir'], 'refbox_address.txt')) as f:
+                value = f.read().strip()
+            if value:
+                return value
+        except OSError:
+            pass
+        return str(self.cfg['refbox_address'])
+
+    def set_field_refbox(self, address):
+        address = str(address or '').strip()
+        if address and not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9.\-]{0,252}', address):
+            raise ValueError('Enter an IPv4 address or host name, e.g. 172.16.1.50')
+        if self.profiles['challenge_nav'].info()['state'] == 'running' or self.profiles['challenge_exp'].info()['state'] == 'running':
+            raise ValueError('Stop the challenge on Launch before changing the refbox address')
+        path = os.path.join(self.cfg['log_dir'], 'refbox_address.txt')
+        if address:
+            with open(path, 'w') as f:
+                f.write(address + '\n')
+        elif os.path.exists(path):
+            os.remove(path)                      # empty = back to web.yaml
+        return self.field_refbox_info()
+
+    def field_refbox_info(self, test=False):
+        now = time.monotonic()
+        if now - getattr(self, '_robot_ip_at', -99) > 10:        # Game page polls every second
+            try:
+                self._robot_ip = subprocess.run(['hostname', '-I'], capture_output=True, text=True, timeout=2).stdout.split()[0]
+            except (OSError, IndexError, subprocess.SubprocessError):
+                self._robot_ip = ''
+            self._robot_ip_at = now
+        robot_ip = self._robot_ip
+        out = {'address': self.field_refbox(), 'default': str(self.cfg['refbox_address']), 'robot_ip': robot_ip}
+        if test:
+            # the robot's mqtt_refbox connects to port 1883 of the bridge broker
+            try:
+                with socket.create_connection((out['address'], 1883), timeout=1.5):
+                    out['broker_ok'] = True
+            except OSError as e:
+                out['broker_ok'], out['broker_error'] = False, str(e)
+        return out
 
     def send_practice_heartbeat(self):
         token = self.practice.game.run_id
@@ -507,7 +556,11 @@ class Manager:
             raise ValueError('Expected a JSON object')
         self.viewed('game')
         if action == 'status':
-            return self.practice.status()
+            return dict(self.practice.status(), field_refbox=self.field_refbox_info())
+        if action == 'field_refbox':
+            return dict(self.practice.status(), field_refbox=self.set_field_refbox(body.get('address')))
+        if action == 'field_test':
+            return dict(self.practice.status(), field_refbox=self.field_refbox_info(test=True))
         if action == 'source':
             if self.game_nav.get('game_on') and time.monotonic()-self.game_nav_at < 3:
                 raise ValueError('Stop the current challenge before switching refbox source')
@@ -761,7 +814,7 @@ def make_handler(manager):
                 return self.send_json(200, {k: c[k] for k in ('rosbridge_port', 'video_port', 'foxglove_port')})
             if parts[:1] == ['practice']:
                 action = parts[1] if len(parts) == 2 else ''
-                if (method == 'GET' and action == 'status') or (method == 'POST' and action in ('source', 'prepare', 'start', 'stop')):
+                if (method == 'GET' and action == 'status') or (method == 'POST' and action in ('source', 'prepare', 'start', 'stop', 'field_refbox', 'field_test')):
                     try:
                         out = manager.practice_api(action, self.body_json() if method == 'POST' else {})
                     except (ValueError, TypeError) as e:

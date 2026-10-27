@@ -66,11 +66,13 @@ class FakePractice:
         self.game = PracticeGame(os.path.join(TMP, 'practice'), lambda *a: None,
                                  lambda: [] if self.source == 'practice' else ['Select Practice first'])
 
+    field = {'address': '172.16.1.4', 'default': '172.16.1.4', 'robot_ip': '172.16.1.226'}
+
     def status(self):
         self.game.on_pose(4.5, .5, math.pi)
         self.game.tick()
         return dict(self.game.snapshot(), source=self.source, busy=False, error='',
-                    fake=True, broker_connected=self.source == 'practice',
+                    fake=True, broker_connected=self.source == 'practice', field_refbox=dict(self.field),
                     ready_reasons=[] if self.source == 'practice' else ['Select Practice first'],
                     layouts=self.game.saved(), history=self.game.history(),
                     placement_rules={name: {z: allowed_rotations(z, name) for z in ZONES if allowed_rotations(z, name)} for name in KINDS[4]})
@@ -83,6 +85,10 @@ class FakePractice:
         elif action == 'prepare': self.game.prepare(body)
         elif action == 'start': self.game.start(body.get('layout_id'), body.get('confirmed', False))
         elif action == 'stop': self.game.stop()
+        elif action == 'field_refbox':
+            self.field = dict(self.field, address=(body.get('address') or '').strip() or self.field['default'])
+            self.field.pop('broker_ok', None)
+        elif action == 'field_test': self.field = dict(self.field, broker_ok=False, broker_error='PC demo: no broker')
         # demo only: what the robot's exploration machine_report would send over MQTT
         elif action == 'report': self.game.on_report(body.get('machine'), body.get('x'), body.get('y'), body.get('yaw'))
         else: raise ValueError('Unknown practice action')
