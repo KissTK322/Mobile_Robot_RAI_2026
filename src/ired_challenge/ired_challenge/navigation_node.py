@@ -286,7 +286,7 @@ class NavigationChallengeNode(Node):
         self.remaining = zones if self.had_routes else None
 
     def on_machines(self, msg):
-        zones, boxes = [], []
+        zones, boxes, named = [], [], []
         for m in msg.machines:
             try:
                 cx, cy = self.field.center(m.zone)
@@ -294,7 +294,9 @@ class NavigationChallengeNode(Node):
                 continue
             zones.append(m.zone)
             boxes.append((cx, cy, float(m.rotation)))
+            named.append({'name': m.name, 'zone': m.zone, 'rotation': int(m.rotation)})
         self.mps_zones = zones
+        self.mps_named = named                  # for the web Game page: where to put the real boxes
         self.mps_boxes = boxes
         if self.router is not None:
             self.router.set_boxes([(m.zone, float(m.rotation)) for m in msg.machines])
@@ -403,7 +405,7 @@ class NavigationChallengeNode(Node):
         info.update(game_on=effective_game_on, practice_watchdog_ok=not self.practice_lease.tripped, pose=[round(v, 3) for v in pose],
                     zone_now=self.field.zone_at(pose[0], pose[1]), mps_zones=self.mps_zones,
                     mps_boxes=[[round(x, 3), round(y, 3), r] for x, y, r in self.mps_boxes],
-                    remaining=self.remaining, game_s=round(time.monotonic() - t0, 1) if t0 else None)
+                    remaining=self.remaining, mps=getattr(self, 'mps_named', []), game_s=round(time.monotonic() - t0, 1) if t0 else None)
         self.state_pub.publish(String(data=json.dumps(info)))
 
 

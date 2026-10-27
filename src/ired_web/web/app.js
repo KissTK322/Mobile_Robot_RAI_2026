@@ -909,6 +909,32 @@ function showNavScore(boxes, counted, doneS) {
     : 'points (level unknown: no box data)';
 }
 
+// Where the refbox wants the real boxes (field refbox: sent from the PRODUCTION phase on, so switch the
+// referee to Production while paused, place the boxes from this list, then press play).
+const ROT_ARROW = { 0: '→', 45: '↗', 90: '↑', 135: '↖', 180: '←', 225: '↙', 270: '↓', 315: '↘' };
+function renderBoxes(list) {
+  const el = $('#game-boxes');
+  if (!list || !list.length) { el.hidden = true; return; }
+  const key = JSON.stringify(list);
+  el.hidden = false;
+  if (el.dataset.key === key) return;
+  el.dataset.key = key;
+  const rows = [...list].sort((a, b) => a.name.localeCompare(b.name)).map(m => {
+    const tr = document.createElement('tr');
+    [m.name, m.zone, `${m.rotation}° ${ROT_ARROW[((m.rotation % 360) + 360) % 360] || ''}`].forEach(t => {
+      const td = document.createElement('td'); td.textContent = t; tr.append(td);
+    });
+    return tr;
+  });
+  const head = document.createElement('p');
+  head.innerHTML = '<strong>Place the real boxes</strong> (box centre on the zone centre; the arrow is the direction the INPUT side faces: → = towards C_Z5x, ↑ = towards C_Zx5)';
+  const table = document.createElement('table'); table.className = 'boxes-table';
+  const th = document.createElement('tr');
+  ['Box', 'Zone', 'Rotation'].forEach(t => { const h = document.createElement('th'); h.textContent = t; th.append(h); });
+  table.append(th, ...rows);
+  el.replaceChildren(head, table);
+}
+
 function renderGame() {
   if (typeof renderPracticeGame === 'function' && renderPracticeGame()) return;
   $('#game-duration-label').textContent = 'left of 10:00';
@@ -930,6 +956,7 @@ function renderGame() {
   if (d && d.game_on && remaining && remaining.length === 0 && GAME.doneS == null) GAME.doneS = d.game_s;
   if (d && !d.game_on && d.state === 'WAIT_GAME') GAME.doneS = null;
   showNavScore(d ? (d.mps_boxes || []).length : 0, d ? counted : 0, GAME.doneS);
+  renderBoxes(d && fresh ? d.mps : null);
   $('#game-state').textContent = !d ? '' : !fresh ? '· no data (challenge stopped?)' : `· ${d.state}${d.target ? ' → ' + d.target : ''}`;
   if (d && fresh) {
     $('#game-msg').textContent = !d.game_on ? 'Waiting for the refbox to start the game…'
