@@ -28,7 +28,10 @@ profiles:
   camera:
     title: Camera + ArUco
     description: Webcam with ArUco marker detection
-    command: python3 ~/ired_ws/src/ired_bringup/scripts/aruco_ros2_node.py
+    # marker_size_m: robot test 2026-10-28 (marker upright, tape from the lens): 50/100/150 cm read
+    # 54.4/111.0/164.8 cm = 10.4 % too far with 0.07. 0.0634 = 0.07 / 1.104 (the black square is
+    # probably ~6.3 cm; re-measure the black square only). Plan B: remove the parameter.
+    command: python3 ~/ired_ws/src/ired_bringup/scripts/aruco_ros2_node.py --ros-args -p marker_size_m:=0.0634
   mapping:
     title: Mapping (SLAM)
     description: Cartographer, build a new map while driving
