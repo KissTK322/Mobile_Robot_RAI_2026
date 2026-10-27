@@ -893,6 +893,22 @@ function subscribeGame(on) {
   }
 }
 
+// Course scoring (FinalProject p.19): points by zones the refbox confirmed, by level (= MPS box count).
+// The refbox itself only lists the reached zones; its score field stays 0 in the navigation challenge.
+const NAV_LEVELS = { 2: ['Easy', [1, 2, 3]], 3: ['Medium', [2, 3, 4]], 4: ['Hard', [3, 4, 4]] };
+function navScore(boxes, counted) {
+  const lv = NAV_LEVELS[boxes];
+  if (!lv) return null;
+  const [name, [a, b, c]] = lv;
+  return { name, max: a + b + c, points: (counted >= 4 ? a : 0) + (counted >= 8 ? b : 0) + (counted >= 12 ? c : 0) };
+}
+function showNavScore(boxes, counted, doneS) {
+  const sc = navScore(boxes, counted);
+  $('#game-points').textContent = sc ? `${sc.points}/${sc.max}` : '–';
+  $('#game-points-label').textContent = sc ? `points · ${sc.name} (${boxes} boxes)` + (doneS != null ? ` · 12/12 at ${Math.floor(doneS / 60)}:${String(Math.round(doneS % 60)).padStart(2, '0')}` : '')
+    : 'points (level unknown: no box data)';
+}
+
 function renderGame() {
   if (typeof renderPracticeGame === 'function' && renderPracticeGame()) return;
   $('#game-duration-label').textContent = 'left of 10:00';
@@ -909,6 +925,11 @@ function renderGame() {
     $('#game-time').textContent = '–:––';
   }
   $('#game-retries').textContent = d ? String(d.retries || 0) : '–';
+  const counted = remaining ? 12 - remaining.length : visited.length;
+  // time to the last zone: first status that shows nothing remaining during a running game
+  if (d && d.game_on && remaining && remaining.length === 0 && GAME.doneS == null) GAME.doneS = d.game_s;
+  if (d && !d.game_on && d.state === 'WAIT_GAME') GAME.doneS = null;
+  showNavScore(d ? (d.mps_boxes || []).length : 0, d ? counted : 0, GAME.doneS);
   $('#game-state').textContent = !d ? '' : !fresh ? '· no data (challenge stopped?)' : `· ${d.state}${d.target ? ' → ' + d.target : ''}`;
   if (d && fresh) {
     $('#game-msg').textContent = !d.game_on ? 'Waiting for the refbox to start the game…'

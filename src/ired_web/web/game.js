@@ -158,6 +158,8 @@ function renderPracticeGame() {
   const exploring=d.config.mode==='exploration';
   $('#game-count').textContent=exploring ? `${d.score}` : `${d.counted}/12`;
   $('#game-count-label').textContent=exploring ? `points · ${Object.keys(d.reports || {}).length}/2 reported` : 'zones counted';
+  if (exploring) { $('#game-points').textContent='–'; $('#game-points-label').textContent='points'; }
+  else showNavScore(d.config.n, d.counted, d.counted >= 12 ? d.elapsed_s : null);
   const left=Math.max(0,Math.ceil(d.time_left_s));
   $('#game-time').textContent=`${Math.floor(left/60)}:${String(left%60).padStart(2,'0')}`;
   $('#game-duration-label').textContent=`left of ${Math.floor(d.config.limit_s/60)}:00`;
