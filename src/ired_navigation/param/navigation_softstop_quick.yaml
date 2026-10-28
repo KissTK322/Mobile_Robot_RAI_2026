@@ -385,7 +385,7 @@ collision_monitor:
       type: "velocity_polygon"
       action_type: "slowdown"
       min_points: 4
-      slowdown_ratio: 0.3   # preserve the original intervention strength
+      slowdown_ratio: 0.6   # 2026-10-28: tall (40 cm) boxes are in the scan now; 0.3 cut the speed so hard (decel up to 1.0 m/s^2 in sim) - 0.6 keeps it under ~0.5, same accuracy, no contacts
       visualize: true
       polygon_pub_topic: "polygon_slowdown"
       enabled: true
