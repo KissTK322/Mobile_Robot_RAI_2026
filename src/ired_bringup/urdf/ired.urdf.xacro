@@ -49,7 +49,10 @@
     <joint name="aruco_camera_joint" type="fixed">
         <parent link="base_link"/>
         <child link="aruco_camera_link"/>
-        <origin xyz="0.25 0.0 0.020" rpy="0.0 0.0 0.0"/>
+        <!-- robot test 2026-10-28 - lens 1.2 to 1.5 cm right of the centreline (y -0.013) and the
+             marker height read 8.5 cm higher per metre of distance with a level camera, so the
+             camera looks about 4.9 deg down (pitch +0.085 rad, positive pitch = looking down). -->
+        <origin xyz="0.25 -0.013 0.020" rpy="0.0 0.085 0.0"/>
     </joint>
 
     <joint name="base_cartesian_joint" type="fixed">
