@@ -84,6 +84,8 @@ class ExplorationNode(Node):
             ('min_sightings', 10), ('min_views', 2), ('max_range', 2.0), ('refbox_rules', False),
             ('map_frame', 'map'), ('base_frame', 'base_footprint'), ('cmd_vel_topic', '/cmd_vel'),
             ('practice_watchdog', False),
+            # 'lidar': stacked (~40 cm) boxes show up in the scan; look at them first, then sweep
+            ('search_mode', 'sweep'), ('scan_topic', '/scan_filtered'),
         ])
         g = {x.name: x.value for x in p}
         self.cfg = g
@@ -99,6 +101,13 @@ class ExplorationNode(Node):
         self.practice_lease = PracticeLease(g['practice_watchdog'])
         if g['practice_watchdog']:
             self.create_subscription(String, '/practice/heartbeat', lambda m: self.practice_lease.heartbeat(m.data), 10)
+        self.boxes = None
+        if g['search_mode'] == 'lidar':
+            from sensor_msgs.msg import LaserScan
+            from rclpy.qos import qos_profile_sensor_data
+            from ired_challenge.lidar_boxes import BoxFinder
+            self.boxes = BoxFinder(self.field)
+            self.create_subscription(LaserScan, g['scan_topic'], self.on_scan, qos_profile_sensor_data)
         self.create_subscription(String, '/aruco/detections', self.on_detections, 10)
         self.create_subscription(OccupancyGrid, '/map', self.on_map,
                                  QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
@@ -116,7 +125,8 @@ class ExplorationNode(Node):
             expected=g['expected'], red_zone=g['red_zone'], look_time=g['look_time'],
             look_spread_deg=g['look_spread_deg'], final_single_view=g['final_single_view'],
             # zones that can hold a machine at all (not START, the red zone or an orange zone)
-            candidate=lambda z: z not in skip and bool(allowed_rotations(z, 'C-BS')), free=self.free)
+            candidate=lambda z: z not in skip and bool(allowed_rotations(z, 'C-BS')), free=self.free,
+            box_zones=self.boxes.zones if self.boxes else None)
         self.get_logger().info(f"Exploration challenge ready, looking for {g['expected']}")
 
     # ------------------------------------------------------------ inputs
@@ -125,6 +135,23 @@ class ExplorationNode(Node):
         ox, oy = msg.info.origin.position.x, msg.info.origin.position.y
         self.walls = np.array([(ox + (i % w + 0.5) * res, oy + (i // w + 0.5) * res)
                                for i, v in enumerate(msg.data) if v >= 65]).reshape(-1, 2)
+        if self.boxes is not None:
+            self.boxes.set_walls(self.walls)
+
+    def on_scan(self, msg):
+        """LiDAR box search: scan points into the map frame, then BoxFinder."""
+        try:
+            t = self.tf.lookup_transform(self.cfg['map_frame'], msg.header.frame_id, Time())
+        except TransformException:
+            return
+        q = t.transform.rotation
+        yaw = euler_from_quaternion([q.x, q.y, q.z, q.w])[2]
+        tx, ty = t.transform.translation.x, t.transform.translation.y
+        r = np.asarray(msg.ranges, float)
+        a = msg.angle_min + np.arange(len(r)) * msg.angle_increment
+        ok = np.isfinite(r) & (r > msg.range_min) & (r < min(msg.range_max, 4.0))
+        x, y = r[ok] * np.cos(a[ok] + yaw) + tx, r[ok] * np.sin(a[ok] + yaw) + ty
+        self.boxes.add(np.stack([x, y], 1), (tx, ty))
 
     def free(self, p):
         return seg_point_dist(p, p, self.walls) >= self.cfg['wall_clearance']

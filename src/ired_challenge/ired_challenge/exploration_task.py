@@ -52,7 +52,7 @@ def border_route(a, b):
 class ExplorationTask:
     def __init__(self, nav, field, estimator, report, log=print, expected=('C-BS', 'C-CS1'),
                  red_zone='C_Z32', candidate=None, free=None, look_time=1.5, move_timeout=30.0,
-                 look_spread_deg=12.0, final_single_view=True):
+                 look_spread_deg=12.0, final_single_view=True, box_zones=None):
         self.nav, self.field, self.est, self.report, self.log = nav, field, estimator, report, log
         self.expected = list(expected)
         self.red_zone = red_zone
@@ -69,6 +69,12 @@ class ExplorationTask:
         self.red_done = False
         self.heading = None                                  # last commanded heading
         self.t_still = None                                  # when the current turn finished
+        # LiDAR search (optional): box_zones() -> zones where the LiDAR sees a box (stacked boxes,
+        # 2026-10-28). Their crossings are visited first and only those zones are looked at; the
+        # normal sweep follows as the fallback for anything still missing.
+        self.box_zones = box_zones
+        self.focus = None                                    # zones looked at while focused
+        self.planned = set()                                 # box zones already queued
 
     def _set(self, s, now):
         if s != self.state:
@@ -92,6 +98,8 @@ class ExplorationTask:
         for dx in (-0.5, 0.5):
             for dy in (-0.5, 0.5):
                 zone = self.field.zone_at(p[0] + dx, p[1] + dy)
+                if self.focus is not None and zone not in self.focus:
+                    continue
                 if zone and self.candidate(zone) and not self._zone_done(zone):
                     h = math.atan2(dy, dx)
                     out += [h - self.look_spread, h, h + self.look_spread] if self.look_spread else [h]
@@ -119,8 +127,46 @@ class ExplorationTask:
                 self.log(f"Reported {e['machine']}: {e['zone']} rotation {e['rotation']} "
                          f"({e['agreeing']} agreeing sightings, {e['views']} views)")
 
+    def _box_crossings(self, zones, start):
+        """Inner crossings at the corners of `zones`, nearest-first from start."""
+        pts = []
+        for z in sorted(zones):
+            cx, cy = self.field.center(z)
+            for dx in (-0.5, 0.5):
+                for dy in (-0.5, 0.5):
+                    p = (cx + dx, cy + dy)
+                    if 0 < p[0] < self.field.columns and 0 < p[1] < self.field.rows and self.free(p) and p not in pts:
+                        pts.append(p)
+        out, cur = [], start
+        while pts:
+            p = min(pts, key=lambda q: math.dist(q, cur))
+            pts.remove(p)
+            out.append(p)
+            cur = p
+        return out
+
+    def _plan_boxes(self, pose):
+        """Put the crossings of newly found LiDAR boxes at the front of the queue."""
+        if self.box_zones is None:
+            return
+        new = {z for z in self.box_zones() if self.candidate(z) and not self._zone_done(z)} - self.planned
+        if not new:
+            return
+        self.planned |= new
+        self.focus = (self.focus or set()) | new
+        front = self._box_crossings(new, (pose[0], pose[1]))
+        self.queue = front + ['END_FOCUS'] + [p for p in self.queue if p not in front and p != 'END_FOCUS']
+        self.log(f'LiDAR sees boxes in {sorted(new)}: looking there first')
+
     def _next(self, pose, now):
+        self._plan_boxes(pose)
         while self.queue:
+            if self.queue[0] == 'END_FOCUS':
+                self.queue.pop(0)
+                if self.focus is not None:
+                    self.log('LiDAR boxes looked at; sweeping the rest of the field')
+                self.focus = None
+                continue
             p = self.queue.pop(0)
             if not self._looks_at(p):
                 continue                                     # nothing left to see from there
