@@ -54,36 +54,57 @@ def refbox_rotation(input_dir_rad, zero_deg=0.0, sign=1.0, step=45):
     return int(round(deg / step) * step) % 360
 
 
-# Where the refbox can put a machine on the 5 x 5 challenge field, and how it can be
-# turned (rcll-refbox src/libs/mps_placing_clips/mps_placing.h, same solver as the game):
-# - never in row 1 (insertion area), the corners, C_Z32, C_Z42 or C_Z52
-# - interior zones: any of the 8 rotations
-# - border zones: conveyor parallel to the wall, so no marker ever faces a wall;
-#   BS/SS: 0/180 on the top row, 90/270 on the side columns;
-#   CS/RS: 180 on the top row, 270 on the right column, 90/270 on the left column
-INTERIOR_ZONES = {'C_Z22', 'C_Z23', 'C_Z24', 'C_Z33', 'C_Z34', 'C_Z43', 'C_Z44'}
-# Course field (FinalProject_ExampleChallenge.pdf p3, confirmed by the seniors 2026-10-22):
-# the orange zones never hold an MPS station
-ORANGE_ZONES = {'C_Z13', 'C_Z35', 'C_Z52', 'C_Z54', 'C_Z55'}
+# Where the refbox can put a machine on the 5 x 5 challenge field, and how it can be turned:
+# re-implementation of rcll-refbox src/libs/mps_placing_clips/mps_placing.h for one machine
+# (checked 2026-10-28 against the source after the seniors' refbox put C-RS2 in C_Z54):
+# - wall rules: BS/SS 0/180 on the top/bottom rows and 90/270 on the side columns; CS/RS 180 on
+#   the top row, 0 on the bottom row, 90/270 on the left and 270 on the right column (corners: none)
+# - every machine reserves its own zone and the zones in front of its input and output (and the
+#   two diagonal zones for 45/135/225/315); none of those may be outside the field or in the
+#   entry zone C_Z31/C_Z41/C_Z51; C_Z32 (red zone) is never used.
+# The course drawing's ORANGE zones (C_Z13, C_Z35, C_Z52, C_Z54, C_Z55) are NOT enforced by the
+# refbox (C_Z13, C_Z35, C_Z54 are possible), so exploration must look there too.
+INTERIOR_ZONES = {'C_Z22', 'C_Z23', 'C_Z24', 'C_Z33', 'C_Z34', 'C_Z42', 'C_Z43', 'C_Z44'}
+ORANGE_ZONES = {'C_Z13', 'C_Z35', 'C_Z52', 'C_Z54', 'C_Z55'}     # course drawing, display only
+_ENTRY = {(5, 1), (4, 1), (3, 1)}
+_EMPTY = _ENTRY | {(3, 2)}
+
+
+def _reserved(x, y, a):
+    cells = {(x, y)}
+    if a not in (0, 180):
+        cells |= {(x, y - 1), (x, y + 1)}
+    if a not in (90, 270):
+        cells |= {(x + 1, y), (x - 1, y)}
+    if a in (45, 225):
+        cells |= {(x + 1, y + 1), (x - 1, y - 1)}
+    if a in (135, 315):
+        cells |= {(x - 1, y + 1), (x + 1, y - 1)}
+    return cells
 
 
 def allowed_rotations(zone, machine):
     """Rotations the refbox generator allows for `machine` (e.g. 'C-CS1') in `zone`;
     [] if the zone can never hold a machine. On the 5 x 5 field only."""
     kind = machine.split('-')[-1].rstrip('0123456789')
-    if zone in ORANGE_ZONES:
-        return []
     x, y = int(zone[3]), int(zone[4])
-    if zone in INTERIOR_ZONES:
-        return list(range(0, 360, 45))
-    plain = kind in ('BS', 'SS')
-    if x == 1 and 2 <= y <= 4:
-        return [90, 270]
-    if x == 5 and y in (3, 4):
-        return [90, 270] if plain else [270]
-    if y == 5 and 2 <= x <= 4:
-        return [0, 180] if plain else [180]
-    return []
+    if not (1 <= x <= 5 and 1 <= y <= 5) or (x, y) in _EMPTY:
+        return []
+    sym = kind in ('BS', 'SS')
+    out = []
+    for a in range(0, 360, 45):
+        if y == 1 and a not in ((0, 180) if sym else (0,)):
+            continue
+        if y == 5 and a not in ((0, 180) if sym else (180,)):
+            continue
+        if x == 1 and a not in (90, 270):
+            continue
+        if x == 5 and a not in ((90, 270) if sym else (270,)):
+            continue
+        if any(cx in (0, 6) or cy in (0, 6) or (cx, cy) in _ENTRY for cx, cy in _reserved(x, y, a)):
+            continue
+        out.append(a)
+    return out
 
 
 def angle_diff(a, b):

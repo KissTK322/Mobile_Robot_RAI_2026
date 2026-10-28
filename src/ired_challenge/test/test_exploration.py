@@ -111,9 +111,15 @@ def test_allowed_rotations_follow_the_refbox_generator():
     assert allowed_rotations('C_Z53', 'C-BS') == [90, 270]
     assert allowed_rotations('C_Z25', 'C-CS1') == [180]             # top row
     assert allowed_rotations('C_Z45', 'C-BS') == [0, 180]
-    for never in ('C_Z11', 'C_Z31', 'C_Z51', 'C_Z15', 'C_Z55', 'C_Z32', 'C_Z42', 'C_Z52',
-                  'C_Z13', 'C_Z35', 'C_Z54'):                     # + orange zones (course field)
+    for never in ('C_Z11', 'C_Z21', 'C_Z31', 'C_Z41', 'C_Z51', 'C_Z15', 'C_Z55', 'C_Z32', 'C_Z52'):
         assert allowed_rotations(never, 'C-CS1') == []
+    # the seniors' refbox put C-RS2 in C_Z54 at 270 (2026-10-27): the course drawing's orange
+    # zones are not enforced by the generator
+    assert allowed_rotations('C_Z54', 'C-RS2') == [270]
+    assert allowed_rotations('C_Z13', 'C-BS') == [90, 270]
+    assert allowed_rotations('C_Z35', 'C-CS1') == [180]
+    assert allowed_rotations('C_Z42', 'C-BS') == [0, 180]           # 90/270 would need C_Z41
+    assert 135 not in allowed_rotations('C_Z22', 'C-CS1')            # 135 would need C_Z31
 
 
 def test_border_rotation_snaps_to_the_allowed_one():

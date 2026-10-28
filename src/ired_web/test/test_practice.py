@@ -6,7 +6,7 @@ import pytest
 
 from ired_web.practice import PracticeGame, generate_layout, validate_layout, near
 from ired_challenge.practice_lease import PracticeLease
-from ired_challenge.exploration import ORANGE_ZONES, allowed_rotations
+from ired_challenge.exploration import allowed_rotations
 
 
 class Clock:
@@ -43,7 +43,6 @@ def test_generator_rules_many_seeds(n):
         assert cfg == generate_layout({'n':n,'seed':seed})
         assert len(cfg['machines']) == n and len(set(cfg['route'])) == 12
         for m in cfg['machines']:
-            assert m['zone'] not in ORANGE_ZONES
             assert m['rotation'] in allowed_rotations(m['zone'],m['name'])
         assert not any(near(a['zone'],b['zone']) for i,a in enumerate(cfg['machines']) for b in cfg['machines'][i+1:])
 
