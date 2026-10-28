@@ -13,7 +13,7 @@ class P:
 
 
 def fake(robot='running', nav='running', pose=(4.5, 0.5, math.pi), rates=None, nodes=('map_server', 'amcl', 'controller_server'),
-         active='Field-adj', estop=False, temp=45.0):
+         active='Field-adj', estop=False, temp=45.0, nav2=True):
     m = Manager.__new__(Manager)
     m.last_viewed = {'status': 0.0, 'gains': 0.0, 'map': 0.0, 'ready': 0.0, 'game': 0.0}
     m.idle_check = lambda: None
@@ -25,6 +25,7 @@ def fake(robot='running', nav='running', pose=(4.5, 0.5, math.pi), rates=None, n
     m.system = types.SimpleNamespace(snapshot=lambda: {'temp_c': temp, 'throttled': '0x0', 'cpu_percent': 20.0})
     m.maps = types.SimpleNamespace(active=lambda: active)
     m.practice = types.SimpleNamespace(source='practice')
+    m.field_prep = types.SimpleNamespace(hub=types.SimpleNamespace(nav2_active=lambda: nav2))
     return m
 
 
@@ -55,3 +56,10 @@ def test_start_pose_off_and_map_changed_warn():
 def test_hot_pi_and_estop():
     s = states(fake(temp=82.0, estop=True).preflight())
     assert s['temp'] == 'bad' and s['estop'] == 'bad'
+
+
+def test_nav_bad_when_nav2_lifecycle_hangs():
+    # robot 2026-10-27: nodes existed but controller_server stayed unconfigured
+    r = fake(nav2=False).preflight()
+    c = next(c for c in r['checks'] if c['key'] == 'nav')
+    assert c['state'] == 'bad' and 'NOT active' in c['value']

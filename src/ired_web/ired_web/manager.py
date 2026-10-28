@@ -783,9 +783,17 @@ class Manager:
             cmd = self.profiles[navs[0]].command
             same = f'map_name:={active}.yaml' in cmd
             up = {'map_server', 'amcl', 'controller_server'} <= nodes
-            add('nav', 'Navigation', 'ok' if same and up else 'warn',
-                f"{self.profiles[navs[0]].spec.get('title', navs[0])}, map {active}" + ('' if up else ' (starting)'),
-                '' if same else f'Map changed after Navigation started: Stop and Start Navigation to load {active}')
+            # nodes can exist while their lifecycle hangs unconfigured (robot 2026-10-27: the
+            # challenge then waits forever); ask the Nav2 servers, at most every 5 s
+            now = time.monotonic()
+            if up and now - getattr(self, '_nav2_checked', -99) > 5:
+                self._nav2_checked, self._nav2_ok = now, self.field_prep.hub.nav2_active()
+            active_ok = up and getattr(self, '_nav2_ok', False)
+            title = f"{self.profiles[navs[0]].spec.get('title', navs[0])}, map {active}"
+            add('nav', 'Navigation', 'ok' if same and active_ok else ('bad' if up and not active_ok else 'warn'),
+                title + ('' if active_ok else ' (starting)' if not up else ' (Nav2 NOT active)'),
+                f'Map changed after Navigation started: Stop and Start Navigation to load {active}' if not same
+                else '' if active_ok or not up else 'Nav2 did not come up: Stop and Start Navigation (or Game page: Prepare)')
         pose = self.node.mapwatch.pose()
         if pose is None:
             add('start', 'Start pose C_Z51', 'unknown' if not navs else 'warn', 'no pose yet',
