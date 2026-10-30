@@ -79,6 +79,9 @@ class ExplorationTask:
         self.focus = None                                    # zones looked at while focused
         self.planned = set()                                 # box zones already queued
         self.seen_from = set()                               # (crossing, zone) already looked at
+        self.transit = False                                 # this drive only moves, no looking on arrival
+        self.last_ok = None                                  # last crossing reached
+        self.views = {}                                      # border box view point -> heading, crossing
         # second look (field game 2026-10-28: CS1 seen 24x at 41 s from its only reachable crossing,
         # reported at 218 s after the robot left and came back). A position counts as a new view
         # from another 0.3 m cell on (MachineEstimator), so relook_step must be over 0.3 m.
@@ -187,6 +190,27 @@ class ExplorationTask:
             cur = p
         return out
 
+    def _border_views(self, zones):
+        """View points in front of the marker faces of LiDAR boxes on the border. The rules park them along
+        the wall, so their markers face the neighbouring border zones and hardly show from the crossings
+        (field game 3 and sim: 100-200 s to read them). (point, heading, crossing, zone), clear of other boxes."""
+        out = []
+        for z in sorted(zones):
+            cx, cy = self.field.center(z)
+            _, zx, zy = self.field.parse(z)
+            if zx in (1, self.field.columns):
+                inner = 1.0 if zx == 1 else -1.0
+                opts = [((cx + 0.1 * inner, cy + s * 0.78), (cx + 0.5 * inner, cy + s * 0.5)) for s in (-1, 1)]
+            elif zy == self.field.rows:
+                opts = [((cx + s * 0.78, cy - 0.1), (cx + s * 0.5, cy - 0.5)) for s in (-1, 1)]
+            else:
+                continue
+            for q, c in opts:
+                other = any(math.dist(q, self.field.center(b)) < 0.5 for b in zones if b != z)
+                if self.free(q) and self.free(c) and not other:
+                    out.append((q, math.atan2(cy - q[1], cx - q[0]), c, z))
+        return out
+
     def _plan_boxes(self, pose):
         """Put the crossings of newly found LiDAR boxes at the front of the queue."""
         if self.box_zones is None:
@@ -197,10 +221,20 @@ class ExplorationTask:
         self.planned |= new
         self.focus = (self.focus or set()) | new
         front = self._box_crossings(new, (pose[0], pose[1]))
+        for q, h, c, z in self._border_views(self.focus):
+            if q not in self.views:
+                self.views[q] = (h, c, z)
+                front.append(q)
         # the crossings stay in the sweep: in focus they looked only at the box zones, and a box next to
         # one the LiDAR missed may be visible from nowhere else (all 2080 placements scanned, 2026-10-31)
         self.queue = front + ['END_FOCUS'] + [p for p in self.queue if p != 'END_FOCUS']
         self.log(f'LiDAR sees boxes in {sorted(new)}: looking there first')
+
+    def _transit(self, pts, target, pose, now):
+        self.transit, self.target = True, target
+        self.route, self.resends = list(pts), 0
+        self.nav.go_via(pts, pose[2])
+        self._set(MOVE, now)
 
     def _next(self, pose, now):
         self._plan_boxes(pose)
@@ -212,17 +246,22 @@ class ExplorationTask:
                 self.focus = None
                 continue
             p = self.queue.pop(0)
-            if not self._looks_at(p):
+            view = self.views.get(p)
+            if view and self._zone_done(view[2]):
+                continue
+            if not view and not self._looks_at(p):
                 continue                                     # nothing left to see from there
-            start = self.back or self.here or (pose[0], pose[1])
-            pts = border_route(start, p) if self.here is not None else [(pose[0], pose[1]), p]
-            if self.back and self.here is not None:
-                pts = [self.here] + pts                      # back onto the crossing first
-            self.back = None
+            if view and self.here is not None:               # to the crossing, then on to the view point
+                pts = border_route(self.here, view[1]) + [p]
+            else:
+                pts = border_route(self.here, p) if self.here is not None else [(pose[0], pose[1]), p]
             self.target = p
             self.route, self.resends = list(pts), 0
             self.nav.go_via(pts, pose[2])
             self._set(MOVE, now)
+            if view:
+                h = view[0]
+                self.back, self.looks = view[1], [h - self.look_spread, h, h + self.look_spread]
             return
         if self.final_single_view:
             self._report_ready(final=True)
@@ -263,12 +302,15 @@ class ExplorationTask:
                 self.red_done = True
                 self.log('Red zone passed')
                 pts = [p for p in crossings(self.field, self.free)]
-                # first hop: the nearest border crossing (a short move inside the red zone,
-                # which never holds a machine), then the sweep from there along the borders
-                first = min(pts, key=lambda p: math.dist(p, pose[:2]))
+                # first hop: through the zone centre to the crossing above it. Straight from the zone
+                # edge the drive scrapes the end of the START fence and DWB aborts it (field game
+                # 2026-10-28 and sim: 40-80 s lost there)
+                centre = self.field.center(self.red_zone)
+                up = [p for p in pts if p[1] > centre[1]] or pts
+                first = min(up, key=lambda p: math.dist(p, centre))
                 self.queue = [first] + [p for p in sweep(pts, first) if p != first]
                 self.here = None
-                self._next(pose, now)
+                self._transit([(pose[0], pose[1]), centre, first], first, pose, now)
             elif st == 'failed' or now - self.t_state > self.move_timeout:
                 self.log('Red zone drive failed, trying again')
                 self._set(WAIT_GAME, now)
@@ -277,7 +319,11 @@ class ExplorationTask:
         if self.state == MOVE:
             if st == 'succeeded' or (st != 'active' and math.dist(pose[:2], self.target) < 0.2):
                 self.here = self.target
-                if self.back is None:
+                if self.transit:
+                    self.transit, self.looks = False, []
+                    self.last_ok = self.here
+                elif self.back is None:
+                    self.last_ok = self.here
                     self.looks = self._looks_at(self.target)
                     self._mark_seen(self.target)
                 self._look(now)
@@ -291,8 +337,13 @@ class ExplorationTask:
                 self.t_state = now
             elif st == 'failed' or now - self.t_state > self.move_timeout:
                 self.log(f'Could not reach {self.target}, skipping it')
-                self.here = None
-                self._next(pose, now)
+                self.back, self.transit, self.looks = None, False, []
+                if self.last_ok is not None and math.dist(pose[:2], self.last_ok) > 0.2:
+                    self.here = None                         # back to the last good crossing first
+                    self._transit([(pose[0], pose[1]), self.last_ok], self.last_ok, pose, now)
+                else:
+                    self.here = self.last_ok
+                    self._next(pose, now)
             return self.info()
 
         if self.state == LOOK:
@@ -314,7 +365,11 @@ class ExplorationTask:
             self.state = LOOK
             return
         pose = (self.here[0], self.here[1], self.heading if self.heading is not None else 0.0)
-        again = self._relook() if self.back is None else None
+        if self.back is not None:                            # a second look or view point: return in a
+            b, self.back = self.back, None                   # drive of its own, a V route stalls DWB
+            self._transit([self.here, b], b, pose, now)
+            return
+        again = self._relook()
         if again:
             machine, q, h = again
             self.relooked.add(machine)

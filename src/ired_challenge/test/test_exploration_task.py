@@ -277,7 +277,9 @@ def test_only_one_second_look_and_the_route_returns_over_the_crossing():
     t.looks, t.t_still = [], None
     t._look(2.0)                                           # nothing new seen from there
     assert 'C-CS1' in t.relooked and t.state == 'MOVE'
-    assert nav.calls[-1] == ('go', [(4.0, 2.68), (4.0, 3.0), (1.0, 3.0), (1.0, 1.0)])
+    assert nav.calls[-1] == ('go', [(4.0, 2.68), (4.0, 3.0)])      # the way back is a drive of its own
+    t.update(3.0, True, (4.0, 3.0, 0.0))
+    assert nav.calls[-1] == ('go', [(4.0, 3.0), (1.0, 3.0), (1.0, 1.0)])
 
 
 def test_unreachable_second_look_point_moves_on():
@@ -318,4 +320,21 @@ def test_box_next_to_the_one_the_lidar_saw_is_still_found_by_the_sweep():
         robot.step(0.1)
         t += 0.1
     assert sorted(reports) == ['C-BS', 'C-CS1']
+
+
+def test_border_box_gets_a_view_point_in_front_of_its_marker():
+    t = ExplorationTask(StubNav(), F, MachineEstimator(F), lambda *a: True, log=lambda m: None,
+                        free=lambda p: 0.3 < p[0] < 4.7 and 0.3 < p[1] < 4.7)
+    views = t._border_views({'C_Z14'})
+    assert {tuple(round(v, 2) for v in q) for q, h, c, z in views} == {(0.6, 2.72), (0.6, 4.28)}
+    assert all(z == 'C_Z14' for *_, z in views) and t._border_views({'C_Z33'}) == []
+
+
+def test_first_hop_goes_through_the_red_zone_centre():
+    nav = StubNav()
+    t = ExplorationTask(nav, F, MachineEstimator(F), lambda *a: True, log=lambda m: None,
+                        free=lambda p: p[1] > 1.3 or p[0] < 1.7)
+    t.state, t.t_state = 'RED_ZONE', 0.0
+    t.update(1.0, True, (2.5, 1.12, 3.14))
+    assert nav.calls[-1] == ('go', [(2.5, 1.12), (2.5, 1.5), (2.0, 2.0)]) and t.state == 'MOVE'
 
