@@ -546,3 +546,64 @@ def test_no_backoff_when_far_from_the_box_or_off():
     nav = FakeNavNudge()
     t = box_dwell(nav, backoff=None)
     assert t.state == 'PICK' and not nav.nudges
+
+
+class StillNav:
+    """Drives succeed at once."""
+    def __init__(self):
+        self.goals = []
+
+    def go_to(self, x, y, yaw):
+        self.goals.append((x, y))
+
+    def state(self):
+        return 'succeeded'
+
+    def cancel(self):
+        pass
+
+
+def dwelling(**kw):
+    task = NavigationTask(StillNav(), F, log=lambda m: None, leave_after=6.5, min_stop=5.0, assume_wait=5.0, **kw)
+    task.red_done, task.state, task.plan = True, 'PICK', ['C_Z33', 'C_Z11']
+    pose = (*F.center('C_Z33'), 0.0)
+    task.update(0.0, True, ['C_Z33', 'C_Z11'], pose)            # picks, the target is the first zone
+    task.update(0.1, True, ['C_Z33', 'C_Z11'], pose)            # in the zone: entry time, dwell starts
+    assert task.state == 'DWELL' and task.target == 'C_Z33'
+    return task, pose
+
+
+def test_leaves_on_its_own_clock_after_both_times():
+    task, pose = dwelling()
+    task.update(6.0, True, ['C_Z33', 'C_Z11'], pose)
+    assert task.state == 'DWELL'
+    task.update(6.7, True, ['C_Z33', 'C_Z11'], pose)
+    assert task.state == 'PICK' and 'C_Z33' in task.assumed
+    assert task.plan == ['C_Z11']
+
+
+def test_zone_left_too_early_comes_back_and_is_not_lost():
+    task, pose = dwelling()
+    task.update(6.7, True, ['C_Z33', 'C_Z11'], pose)
+    task.update(12.0, True, ['C_Z33', 'C_Z11'], pose)           # refbox still wants it
+    assert not task.assumed and 'C_Z33' in task.plan and 'C_Z33' in task.deferred
+
+
+def test_not_done_while_a_left_zone_is_unconfirmed():
+    task, pose = dwelling()
+    task.plan = ['C_Z33']
+    task.update(6.7, True, ['C_Z33'], pose)
+    task.update(6.8, True, ['C_Z33'], pose)
+    assert task.state == 'PICK'
+    task.update(7.5, True, [], pose)
+    assert task.state == 'DONE'
+
+
+def test_off_by_default_waits_for_the_refbox():
+    task = NavigationTask(StillNav(), F, log=lambda m: None)
+    task.red_done, task.state, task.plan = True, 'PICK', ['C_Z33']
+    pose = (*F.center('C_Z33'), 0.0)
+    task.update(0.0, True, ['C_Z33'], pose)
+    task.update(0.1, True, ['C_Z33'], pose)
+    task.update(8.0, True, ['C_Z33'], pose)
+    assert task.state == 'DWELL'

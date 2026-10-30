@@ -191,6 +191,8 @@ class NavigationChallengeNode(Node):
         p = self.declare_parameters('', [
             ('zone_size', 1.0), ('origin_x', 0.0), ('origin_y', 0.0), ('red_zone', 'C_Z32'),
             ('dwell', 5.5), ('confirm_timeout', 4.0), ('drive_timeout', 40.0), ('retries', 2),
+            # leave a zone on our own clock (see NavigationTask.leave_after); 0 = wait for the refbox
+            ('leave_after', 0.0), ('min_stop', 5.0), ('assume_wait', 5.0),
             ('order', 'nearest'), ('avoid_mps_zones', True), ('rate', 10.0),
             ('map_frame', 'map'), ('base_frame', 'base_footprint'),
             ('escape_speed', 0.06), ('escape_time', 3.0), ('escape_clearance', 0.30),
@@ -257,6 +259,7 @@ class NavigationChallengeNode(Node):
             Nav2Adapter(self.navigator, self.escape, legs=g['route_legs'], nudge=nudge), self.field,
             log=self.get_logger().info,
             red_zone=g['red_zone'], dwell=g['dwell'], confirm_timeout=g['confirm_timeout'],
+            leave_after=g['leave_after'], min_stop=g['min_stop'], assume_wait=g['assume_wait'],
             drive_timeout=g['drive_timeout'], retries=g['retries'], order=g['order'],
             grid_tries=g['grid_tries'], stuck_time=g['stuck_time'], stuck_dist=g['stuck_dist'], fine=fine,
             backoff={k: g['backoff_' + k] for k in ('dist', 'speed', 'time')} if g['box_backoff'] else None)

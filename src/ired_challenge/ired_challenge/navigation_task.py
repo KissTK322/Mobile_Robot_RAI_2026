@@ -29,7 +29,8 @@ WAIT_GAME, RED_ZONE, PICK, DRIVE, DWELL, BACKOFF, DONE = 'WAIT_GAME', 'RED_ZONE'
 class NavigationTask:
     def __init__(self, nav, field, log=print, red_zone='C_Z32', dwell=5.5, confirm_timeout=4.0,
                  drive_timeout=40.0, retries=2, order='given', blocked_zones=(), router=None,
-                 grid_tries=1, stuck_time=8.0, stuck_dist=0.10, fine=None, backoff=None):
+                 grid_tries=1, stuck_time=8.0, stuck_dist=0.10, fine=None, backoff=None,
+                 leave_after=0.0, min_stop=5.0, assume_wait=5.0):
         self.nav, self.field, self.log = nav, field, log
         # Fine approach (optional): Nav2 calls a zone "reached" up to xy_goal_tolerance (0.10 m)
         # away. While the robot dwells in the zone anyway, a slow omni P-correction moves it onto
@@ -46,6 +47,14 @@ class NavigationTask:
         self.red_zone = red_zone
         self.dwell = dwell                      # refbox needs 5 s inside the zone
         self.confirm_timeout = confirm_timeout  # extra wait for the refbox to drop the zone
+        # Leave without waiting for the refbox message (optional, 0 = off). The refbox counts a zone
+        # 5 s after the pose enters it, but broadcasts the routes only every 2 s and our node reads
+        # them at 1 Hz: the field game of 2026-10-28 left about 9 s after entry. leave_after: s after
+        # the robot entered the zone, min_stop: s after it reached the stop point. If the refbox
+        # still lists the zone assume_wait s later, it goes back on the plan: costs time, no zone.
+        self.leave_after, self.min_stop, self.assume_wait = leave_after, min_stop, assume_wait
+        self.t_entry = None                     # when the robot entered the target zone
+        self.assumed = {}                       # zone left before the refbox said so -> time
         self.drive_timeout = drive_timeout
         self.retries = retries
         self.order = order
@@ -78,8 +87,13 @@ class NavigationTask:
                 self.fine_t0 = None
         self.state, self.t_state = state, now
 
+    def _may_leave(self, now):
+        return (self.leave_after > 0 and self.t_entry is not None and now - self.t_entry >= self.leave_after
+                and now - self.t_inside >= self.min_stop)
+
     def _drive_to(self, zone, pose, now):
         self.target = zone
+        self.t_entry = None
         pts = None
         if self.router is not None and self.tries < self.grid_tries and hasattr(self.nav, 'go_via'):
             pts = self.router.path((pose[0], pose[1]), zone)
@@ -231,10 +245,24 @@ class NavigationTask:
             return self.info()                  # no routes from the refbox yet
         remaining = list(remaining)
         # keep our order, but follow the refbox: drop visited zones, add new ones
-        self.plan = [z for z in self.plan if z in remaining] + [z for z in remaining if z not in self.plan]
+        for z, t in list(self.assumed.items()):
+            if z not in remaining:
+                del self.assumed[z]
+            elif now - t > self.assume_wait:
+                del self.assumed[z]
+                self.log(f'{z} not counted after leaving it: back on the plan')
+                if z not in self.deferred:
+                    self.deferred.append(z)
+        wanted = [z for z in remaining if z not in self.assumed]
+        self.plan = [z for z in self.plan if z in wanted] + [z for z in wanted if z not in self.plan]
+        if self.state in (DRIVE, DWELL) and self.t_entry is None and self.target \
+                and self.field.inside(self.target, pose[0], pose[1], margin=0.03):
+            self.t_entry = now
 
         if self.state == PICK:
             if not self.plan:
+                if self.assumed:
+                    return self.info()          # the refbox has not confirmed the last zones yet
                 self.target = None
                 self._set(DONE, now)
                 self.log(f'All zones visited: {self.visited}')
@@ -281,7 +309,9 @@ class NavigationTask:
         if self.state == DWELL:
             if self.fine:
                 self._fine_step(now, pose)
-            if self.target not in remaining:
+            if self.target not in remaining or self._may_leave(now):
+                if self.target in remaining:
+                    self.assumed[self.target] = now
                 self._fine_stop()
                 box = self.target in self.blocked and self.field.center(self.target)
                 self._visited(now)
