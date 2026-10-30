@@ -230,6 +230,16 @@ class ExplorationTask:
         self.queue = front + ['END_FOCUS'] + [p for p in self.queue if p != 'END_FOCUS']
         self.log(f'LiDAR sees boxes in {sorted(new)}: looking there first')
 
+    def _route(self, a, b):
+        """Border route from a to b, the way round that stays clear of walls and the START fence."""
+        def clear(p, q):
+            n = max(1, int(math.dist(p, q) / 0.1))
+            return all(self.free((p[0] + (q[0] - p[0]) * i / n, p[1] + (q[1] - p[1]) * i / n)) for i in range(n + 1))
+        for c in ((b[0], a[1]), (a[0], b[1])):
+            if clear(a, c) and clear(c, b):
+                return [a, c, b] if c not in (a, b) else [a, b]
+        return border_route(a, b)
+
     def _transit(self, pts, target, pose, now):
         self.transit, self.target = True, target
         self.route, self.resends = list(pts), 0
@@ -252,9 +262,9 @@ class ExplorationTask:
             if not view and not self._looks_at(p):
                 continue                                     # nothing left to see from there
             if view and self.here is not None:               # to the crossing, then on to the view point
-                pts = border_route(self.here, view[1]) + [p]
+                pts = self._route(self.here, view[1]) + [p]
             else:
-                pts = border_route(self.here, p) if self.here is not None else [(pose[0], pose[1]), p]
+                pts = self._route(self.here, p) if self.here is not None else [(pose[0], pose[1]), p]
             self.target = p
             self.route, self.resends = list(pts), 0
             self.nav.go_via(pts, pose[2])
@@ -335,10 +345,14 @@ class ExplorationTask:
                 self.log(f'Drive to {self.target} aborted at ({pose[0]:.2f}, {pose[1]:.2f}), sending the rest of the route')
                 self.nav.go_via([(pose[0], pose[1])] + (rest or [self.target]), pose[2])
                 self.t_state = now
-            elif st == 'failed' or now - self.t_state > self.move_timeout:
+            elif (st == 'failed' and now - self.t_state > 1.0) or now - self.t_state > self.move_timeout:
                 self.log(f'Could not reach {self.target}, skipping it')
+                was_transit = self.transit
                 self.back, self.transit, self.looks = None, False, []
-                if self.last_ok is not None and math.dist(pose[:2], self.last_ok) > 0.2:
+                if was_transit:                              # never loop on the way back: go on from here
+                    self.here, self.last_ok = None, None
+                    self._next(pose, now)
+                elif self.last_ok is not None and math.dist(pose[:2], self.last_ok) > 0.2:
                     self.here = None                         # back to the last good crossing first
                     self._transit([(pose[0], pose[1]), self.last_ok], self.last_ok, pose, now)
                 else:

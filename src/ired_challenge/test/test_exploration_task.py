@@ -338,3 +338,22 @@ def test_first_hop_goes_through_the_red_zone_centre():
     t.update(1.0, True, (2.5, 1.12, 3.14))
     assert nav.calls[-1] == ('go', [(2.5, 1.12), (2.5, 1.5), (2.0, 2.0)]) and t.state == 'MOVE'
 
+
+def test_route_goes_round_the_start_fence():
+    """Sim E06: from crossing (1, 1) the x-first route ran along y = 1 through the fence."""
+    t = ExplorationTask(StubNav(), F, MachineEstimator(F), lambda *a: True, log=lambda m: None,
+                        free=lambda p: p[1] > 1.2 or p[0] < 1.7)
+    assert t._route((1.0, 1.0), (3.0, 4.0)) == [(1.0, 1.0), (1.0, 4.0), (3.0, 4.0)]
+    assert t._route((1.0, 2.0), (3.0, 4.0)) == [(1.0, 2.0), (3.0, 2.0), (3.0, 4.0)]
+
+
+def test_failed_way_back_does_not_loop():
+    nav = StubNav()
+    t = ExplorationTask(nav, F, MachineEstimator(F), lambda *a: True, log=lambda m: None)
+    t.state, t.transit, t.target, t.here, t.last_ok, t.t_state = 'MOVE', True, (1.0, 1.0), None, (1.0, 1.0), 0.0
+    t.queue, t.red_done = [(2.0, 2.0)], True
+    nav.st = 'failed'
+    t.resends = 3
+    t.update(5.0, True, (2.0, 1.5, 0.0))
+    assert t.last_ok is None and t.target == (2.0, 2.0) and len(nav.calls) == 1
+
