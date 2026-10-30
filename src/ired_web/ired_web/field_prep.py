@@ -17,6 +17,9 @@ STEPS = [('estop', 'STOP released'), ('robot', 'Robot mode + wheel board + LiDAR
 START = (4.5, 0.5, math.pi)
 
 
+CHALLENGES = {'navigation': 'challenge_nav', 'exploration': 'challenge_exp', 'exploration_lidar': 'challenge_exp_lidar'}
+
+
 class FieldPrep:
     def __init__(self, hub, clock=time.monotonic, sleep=time.sleep, nav_profile='navigation_quick',
                  robot_timeout=30.0, nav_timeout=60.0, challenge_timeout=40.0):
@@ -36,14 +39,14 @@ class FieldPrep:
                     'steps': [dict(s) for s in self.steps]}
 
     def start(self, mode):
-        if mode not in ('navigation', 'exploration'):
-            raise ValueError('Mode must be navigation or exploration')
+        if mode not in CHALLENGES:
+            raise ValueError('Mode must be navigation, exploration or exploration_lidar')
         with self.lock:
             if self.busy:
                 raise ValueError('Already preparing')
             self.busy, self.mode, self.done, self.error = True, mode, False, ''
             self.steps = [{'key': k, 'label': l, 'state': 'pending', 'msg': ''} for k, l in STEPS
-                          if k != 'camera' or mode == 'exploration']
+                          if k != 'camera' or mode != 'navigation']
         threading.Thread(target=self.run, daemon=True).start()
         return self.status()
 
@@ -99,7 +102,7 @@ class FieldPrep:
                     raise RuntimeError(f'{nav} did not become active twice: check its log on the Launch page')
             self._set('nav', 'ok', f'{nav} active')
 
-            if self.mode == 'exploration':
+            if self.mode != 'navigation':
                 self._set('camera', 'active', 'starting')
                 if not h.running('camera'):
                     h.start('camera')
@@ -107,7 +110,7 @@ class FieldPrep:
                     raise RuntimeError('Camera + ArUco did not start: check its log on the Launch page')
                 self._set('camera', 'ok', 'running')
 
-            chal = 'challenge_exp' if self.mode == 'exploration' else 'challenge_nav'
+            chal = CHALLENGES[self.mode]
             self._set('challenge', 'active', 'starting' if not h.running(chal) else 'already running')
             if not h.running(chal):
                 h.start(chal)

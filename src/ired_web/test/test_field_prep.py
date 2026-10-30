@@ -74,6 +74,12 @@ def test_exploration_starts_camera_and_exp_challenge():
     assert s['done'] and ('start', 'camera') in h.calls and ('start', 'challenge_exp') in h.calls
 
 
+def test_exploration_lidar_starts_camera_and_lidar_challenge():
+    h = Hub()
+    s = run(h, 'exploration_lidar')
+    assert s['done'] and ('start', 'camera') in h.calls and ('start', 'challenge_exp_lidar') in h.calls
+
+
 def test_wrong_place_is_reported():
     h = Hub(pose=(3.2, 0.5, math.pi))
     s = run(h)
