@@ -129,7 +129,7 @@ function renderFieldPrep(d) {
   // One button: Robot -> Navigation (Nav2 really active) -> Challenge -> start pose C_Z51. Field source only.
   const p=d.field_prep, list=document.getElementById('field-prep-steps');
   const field=d.source==='field', busy=!!(p && p.busy) || PRACTICE.pending || d.busy;
-  ['field-prep-nav','field-prep-exp','field-prep-sweep'].forEach(id=>{const b=document.getElementById(id); b.disabled=!field || busy; b.hidden=!field;});
+  ['field-prep-nav','field-prep-exp','field-prep-sweep','field-prep-test'].forEach(id=>{const b=document.getElementById(id); b.disabled=!field || busy; b.hidden=!field;});
   if (!p || !p.steps || !p.steps.length) { list.hidden=true; return; }
   list.hidden=false;
   const mark={ok:'✅',bad:'❌',active:'⏳',pending:'·'};
@@ -140,6 +140,7 @@ function renderFieldPrep(d) {
 document.getElementById('field-prep-nav').onclick=()=>rbAction('field_prepare',{mode:'navigation'});
 document.getElementById('field-prep-exp').onclick=()=>rbAction('field_prepare',{mode:'exploration'});
 document.getElementById('field-prep-sweep').onclick=()=>rbAction('field_prepare',{mode:'exploration_sweep'});
+document.getElementById('field-prep-test').onclick=()=>rbAction('field_prepare',{mode:'navigation_test'});
 document.getElementById('field-save').onclick=()=>rbAction('field_refbox',{address:document.getElementById('field-address').value});
 document.getElementById('field-test').onclick=()=>rbAction('field_test',{});
 rb('connect').onclick=()=>rbAction('source',{source:rb('source').value});

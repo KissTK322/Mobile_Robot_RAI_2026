@@ -509,7 +509,7 @@ class Manager:
         if address and not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9.\-]{0,252}', address):
             raise ValueError('Enter an IPv4 address or host name, e.g. 172.16.1.50')
         if any(n in self.profiles and self.profiles[n].info()['state'] == 'running'
-               for n in ('challenge_nav', 'challenge_exp', 'challenge_exp_lidar')):
+               for n in ('challenge_nav', 'challenge_nav_fast', 'challenge_exp', 'challenge_exp_lidar')):
             raise ValueError('Stop the challenge on Launch before changing the refbox address')
         path = os.path.join(self.cfg['log_dir'], 'refbox_address.txt')
         if address:
@@ -577,7 +577,7 @@ class Manager:
         return 'challenge_exp' if self.practice.game.mode() == 'exploration' else 'challenge_nav'
 
     def stop_challenges(self):
-        for name in ('challenge_nav', 'challenge_exp', 'challenge_exp_lidar'):
+        for name in ('challenge_nav', 'challenge_nav_fast', 'challenge_exp', 'challenge_exp_lidar'):
             if name in self.profiles:
                 self.profiles[name].stop()
 
@@ -808,7 +808,7 @@ class Manager:
             add('start', 'Start pose C_Z51', 'ok' if ok else 'warn',
                 f'({x:.2f}, {y:.2f}) {d * 100:.0f} cm / {dyaw:.0f} deg from the start',
                 '' if ok else 'Put the robot on C_Z51 facing C_Z41, Map page: "Robot is at C_Z51"')
-        chal = running('challenge_nav') or running('challenge_exp') or running('challenge_exp_lidar')
+        chal = any(running(n) for n in ('challenge_nav', 'challenge_nav_fast', 'challenge_exp', 'challenge_exp_lidar'))
         add('challenge', 'Challenge program + refbox', 'ok' if chal else 'warn',
             f"source {getattr(self.practice, 'source', '?')}, challenge {'running' if chal else 'stopped'}",
             '' if chal else 'Game page: Prepare (practice) or Launch: Challenge: Navigation (field refbox)')

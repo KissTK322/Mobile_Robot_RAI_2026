@@ -12,8 +12,11 @@ def generate_launch_description():
     params = os.path.join(get_package_share_directory('ired_challenge'), 'config', 'navigation_challenge.yaml')
     return LaunchDescription([
         DeclareLaunchArgument('practice_watchdog', default_value='false'),
+        DeclareLaunchArgument('leave_after', default_value='0.0'),
         Node(package='ired_challenge', executable='mps_obstacles', name='mps_obstacles',
              parameters=[params], output='screen'),
         Node(package='ired_challenge', executable='navigation_challenge', name='navigation_challenge',
-             parameters=[params, {'practice_watchdog': ParameterValue(LaunchConfiguration('practice_watchdog'), value_type=bool)}], output='screen'),
+             parameters=[params, {'practice_watchdog': ParameterValue(LaunchConfiguration('practice_watchdog'), value_type=bool),
+                                  'leave_after': ParameterValue(LaunchConfiguration('leave_after'), value_type=float)}],
+             output='screen'),
     ])

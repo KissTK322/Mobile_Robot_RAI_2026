@@ -80,6 +80,22 @@ def test_exploration_sweep_stays_available_as_plan_b():
     assert s['done'] and ('start', 'camera') in h.calls and ('start', 'challenge_exp') in h.calls
 
 
+def test_navigation_test_mode_replaces_the_running_nav_profile():
+    h = Hub()
+    h.on.add('navigation_fast')
+    s = run(h, 'navigation_test')
+    assert s['done'] and ('start', 'navigation_fast_accel') in h.calls
+    assert ('start', 'challenge_nav_fast') in h.calls and ('start', 'camera') not in h.calls
+
+
+def test_every_prepare_button_sends_a_known_mode():
+    import os, re
+    from ired_web.field_prep import CHALLENGES
+    js = open(os.path.join(os.path.dirname(__file__), '..', 'web', 'game.js')).read()
+    modes = set(re.findall(r"field_prepare',\{mode:'(\w+)'\}", js))
+    assert modes == set(CHALLENGES)
+
+
 def test_wrong_place_is_reported():
     h = Hub(pose=(3.2, 0.5, math.pi))
     s = run(h)

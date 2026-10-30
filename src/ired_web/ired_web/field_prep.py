@@ -18,7 +18,9 @@ START = (4.5, 0.5, math.pi)
 
 
 # Exploration = LiDAR search (user 2026-10-30; it falls back to the sweep by itself), sweep kept as plan B
-CHALLENGES = {'navigation': 'challenge_nav', 'exploration': 'challenge_exp_lidar', 'exploration_sweep': 'challenge_exp'}
+CHALLENGES = {'navigation': 'challenge_nav', 'exploration': 'challenge_exp_lidar', 'exploration_sweep': 'challenge_exp',
+              'navigation_test': 'challenge_nav_fast'}
+NAV_TEST = 'navigation_fast_accel'              # sim-only speed test of 2026-10-30, needs these exact limits
 
 
 class FieldPrep:
@@ -41,13 +43,13 @@ class FieldPrep:
 
     def start(self, mode):
         if mode not in CHALLENGES:
-            raise ValueError('Mode must be navigation, exploration or exploration_sweep')
+            raise ValueError('Mode must be ' + ', '.join(CHALLENGES))
         with self.lock:
             if self.busy:
                 raise ValueError('Already preparing')
             self.busy, self.mode, self.done, self.error = True, mode, False, ''
             self.steps = [{'key': k, 'label': l, 'state': 'pending', 'msg': ''} for k, l in STEPS
-                          if k != 'camera' or mode != 'navigation']
+                          if k != 'camera' or mode.startswith('exploration')]
         threading.Thread(target=self.run, daemon=True).start()
         return self.status()
 
@@ -89,9 +91,12 @@ class FieldPrep:
             self._set('robot', 'ok', f"wheels {r.get('/ired/motor/data', 0):.0f} Hz, LiDAR {r.get('/scan_filtered', 0):.1f} Hz")
 
             nav = h.running_nav()
-            self._set('nav', 'active', f'starting {self.nav_profile}' if not nav else f'checking {nav}')
+            if self.mode == 'navigation_test' and nav != NAV_TEST:
+                nav = None                              # start it: its conflicts stop the other profile
+            want = NAV_TEST if self.mode == 'navigation_test' else self.nav_profile
+            self._set('nav', 'active', f'starting {want}' if not nav else f'checking {nav}')
             if not nav:
-                nav = self.nav_profile
+                nav = want
                 h.start(nav)
             if not self._wait(h.nav2_active, self.nav_timeout, 1.0):
                 # seen on the robot: controller_server stayed unconfigured; a restart fixed it
@@ -103,7 +108,7 @@ class FieldPrep:
                     raise RuntimeError(f'{nav} did not become active twice: check its log on the Launch page')
             self._set('nav', 'ok', f'{nav} active')
 
-            if self.mode != 'navigation':
+            if self.mode.startswith('exploration'):
                 self._set('camera', 'active', 'starting')
                 if not h.running('camera'):
                     h.start('camera')

@@ -37,39 +37,45 @@ profiles:
     description: Cartographer, build a new map while driving
     command: ros2 launch ired_navigation slam.launch.xml
     requires: [robot]
-    conflicts: [navigation, navigation_omni, navigation_softstop, mapping_odom, navigation_quick, navigation_fast, navigation_fast_soft, navigation_fast_40]
+    conflicts: [navigation, navigation_omni, navigation_softstop, mapping_odom, navigation_quick, navigation_fast, navigation_fast_soft, navigation_fast_40, navigation_fast_accel]
   mapping_odom:
     title: Mapping (odom)
     description: Cartographer helped by wheel + gyro odometry, LiDAR rays cut at 6 m (test; Mapping (SLAM) is plan B)
     command: ros2 launch ired_navigation slam.launch.xml configuration_basename:=ired_rplidar_2d_odom.lua
     requires: [robot]
-    conflicts: [navigation, navigation_omni, navigation_softstop, mapping, navigation_quick, navigation_fast, navigation_fast_soft, navigation_fast_40]
+    conflicts: [navigation, navigation_omni, navigation_softstop, mapping, navigation_quick, navigation_fast, navigation_fast_soft, navigation_fast_40, navigation_fast_accel]
   navigation:
     title: Navigation
     description: Nav2 with the saved map and AMCL
     # {map_name}: the map chosen on the Map page (maps_dir), default map
     command: ros2 launch ired_navigation navigation.launch.xml map_name:={map_name}.yaml
     requires: [robot]
-    conflicts: [mapping, mapping_odom, navigation_omni, navigation_softstop, navigation_quick, navigation_fast, navigation_fast_soft, navigation_fast_40]
+    conflicts: [mapping, mapping_odom, navigation_omni, navigation_softstop, navigation_quick, navigation_fast, navigation_fast_soft, navigation_fast_40, navigation_fast_accel]
   challenge_nav:
     title: "Challenge: Navigation"
     description: Refbox bridge + MPS boxes + navigation challenge program (start a Navigation profile and set the start pose first)
     # REFBOX_BRIDGE_ADDRESS = the MQTT broker (refbox bridge, or refbox_lite on the PC); ROBOT_IP = this robot
     command: bash -c 'export REFBOX_BRIDGE_ADDRESS={game_refbox_address} ROBOT_IP={game_robot_topic}; ros2 run ired_refbox mqtt_refbox & exec ros2 launch ired_challenge navigation_challenge.launch.py practice_watchdog:={practice_watchdog}'
     requires: [robot]
-    conflicts: [challenge_exp, challenge_exp_lidar]
+    conflicts: [challenge_exp, challenge_exp_lidar, challenge_nav_fast]
+  challenge_nav_fast:
+    title: "Challenge: Navigation (test: leave at 6.5 s)"
+    description: Like Challenge Navigation, but leaves a zone on its own clock, 6.5 s after entering it and 5 s after reaching the stop point. A zone the refbox did not count comes back later. PC sim only so far
+    command: bash -c 'export REFBOX_BRIDGE_ADDRESS={game_refbox_address} ROBOT_IP={game_robot_topic}; ros2 run ired_refbox mqtt_refbox & exec ros2 launch ired_challenge navigation_challenge.launch.py practice_watchdog:={practice_watchdog} leave_after:=6.5'
+    requires: [robot]
+    conflicts: [challenge_nav, challenge_exp, challenge_exp_lidar]
   challenge_exp:
     title: "Challenge: Exploration"
     description: Refbox bridge + exploration challenge program (finds C-BS and C-CS1 with the camera and reports them; start Camera + ArUco and a Navigation profile first)
     command: bash -c 'export REFBOX_BRIDGE_ADDRESS={game_refbox_address} ROBOT_IP={game_robot_topic}; ros2 run ired_refbox mqtt_refbox & exec ros2 run ired_challenge exploration_challenge --ros-args -p practice_watchdog:={practice_watchdog}'
     requires: [robot]
-    conflicts: [challenge_nav, challenge_exp_lidar]
+    conflicts: [challenge_nav, challenge_exp_lidar, challenge_nav_fast]
   challenge_exp_lidar:
     title: "Challenge: Exploration (LiDAR, default)"
     description: Like Challenge Exploration, but first looks where the LiDAR sees boxes (stacked ~40 cm boxes only), then sweeps the rest
     command: bash -c 'export REFBOX_BRIDGE_ADDRESS={game_refbox_address} ROBOT_IP={game_robot_topic}; ros2 run ired_refbox mqtt_refbox & exec ros2 run ired_challenge exploration_challenge --ros-args -p practice_watchdog:={practice_watchdog} -p search_mode:=lidar'
     requires: [robot]
-    conflicts: [challenge_nav, challenge_exp]
+    conflicts: [challenge_nav, challenge_exp, challenge_nav_fast]
   record:
     title: Record (rosbag)
     description: Records driving data to ~/bags while Navigation runs (for finding why the robot stalls)
@@ -81,38 +87,44 @@ profiles:
     description: Nav2 tuned for the omni base (sideways, soft start/stop, real robot size)
     command: ros2 launch ired_navigation navigation.launch.xml map_name:={map_name}.yaml param_name:=navigation_omni.yaml
     requires: [robot]
-    conflicts: [mapping, mapping_odom, navigation, navigation_softstop, navigation_quick, navigation_fast, navigation_fast_soft, navigation_fast_40]
+    conflicts: [mapping, mapping_odom, navigation, navigation_softstop, navigation_quick, navigation_fast, navigation_fast_soft, navigation_fast_40, navigation_fast_accel]
   navigation_softstop:
     title: Navigation (soft-stop)
     description: Navigation (omni) with gentle 0.18 m/s^2 starts/stops and wall slowdown only when moving toward it (test)
     command: ros2 launch ired_navigation navigation.launch.xml map_name:={map_name}.yaml param_name:=navigation_softstop.yaml
     requires: [robot]
-    conflicts: [mapping, mapping_odom, navigation, navigation_omni, navigation_quick, navigation_fast, navigation_fast_soft, navigation_fast_40]
+    conflicts: [mapping, mapping_odom, navigation, navigation_omni, navigation_quick, navigation_fast, navigation_fast_soft, navigation_fast_40, navigation_fast_accel]
 
   navigation_quick:
     title: Navigation (quick start)
     description: Like Navigation (soft-stop) but accelerates at 0.30 m/s^2 (braking stays 0.18) - test
     command: ros2 launch ired_navigation navigation.launch.xml map_name:={map_name}.yaml param_name:=navigation_softstop_quick.yaml
     requires: [robot]
-    conflicts: [mapping, mapping_odom, navigation, navigation_omni, navigation_softstop, navigation_fast, navigation_fast_soft, navigation_fast_40]
+    conflicts: [mapping, mapping_odom, navigation, navigation_omni, navigation_softstop, navigation_fast, navigation_fast_soft, navigation_fast_40, navigation_fast_accel]
   navigation_fast:
     title: Navigation (fast 0.30)
     description: 0.30 m/s, accel 0.30, braking 0.25 m/s^2 - PC sim 2026-10-28 12/12 in 140 s (quick start 154 s), same accuracy - test
     command: ros2 launch ired_navigation navigation.launch.xml map_name:={map_name}.yaml param_name:=navigation_fast_30d.yaml
     requires: [robot]
-    conflicts: [mapping, mapping_odom, navigation, navigation_omni, navigation_softstop, navigation_quick, navigation_fast_soft, navigation_fast_40]
+    conflicts: [mapping, mapping_odom, navigation, navigation_omni, navigation_softstop, navigation_quick, navigation_fast_soft, navigation_fast_40, navigation_fast_accel]
   navigation_fast_soft:
     title: Navigation (fast 0.30, soft brake)
     description: 0.30 m/s, accel 0.30, braking 0.18 m/s^2 - PC sim 2026-10-28 12/12 in 148 s - test
     command: ros2 launch ired_navigation navigation.launch.xml map_name:={map_name}.yaml param_name:=navigation_fast_30.yaml
     requires: [robot]
-    conflicts: [mapping, mapping_odom, navigation, navigation_omni, navigation_softstop, navigation_quick, navigation_fast, navigation_fast_40]
+    conflicts: [mapping, mapping_odom, navigation, navigation_omni, navigation_softstop, navigation_quick, navigation_fast, navigation_fast_40, navigation_fast_accel]
   navigation_fast_40:
     title: Navigation (top speed 0.40)
     description: 0.40 m/s, accel 0.30, braking 0.25 m/s^2 - needs 0.32 m to stop - PC sim only, test on the robot before relying on it
     command: ros2 launch ired_navigation navigation.launch.xml map_name:={map_name}.yaml param_name:=navigation_fast_40.yaml
     requires: [robot]
-    conflicts: [mapping, mapping_odom, navigation, navigation_omni, navigation_softstop, navigation_quick, navigation_fast, navigation_fast_soft]
+    conflicts: [mapping, mapping_odom, navigation, navigation_omni, navigation_softstop, navigation_quick, navigation_fast, navigation_fast_soft, navigation_fast_accel]
+  navigation_fast_accel:
+    title: Navigation (test 0.30, accel 0.45)
+    description: 0.30 m/s, accel 0.45, braking 0.25 m/s^2 - PC sim only, watch the wheels and AMCL when testing
+    command: ros2 launch ired_navigation navigation.launch.xml map_name:={map_name}.yaml param_name:=navigation_fast_30a.yaml
+    requires: [robot]
+    conflicts: [mapping, mapping_odom, navigation, navigation_omni, navigation_softstop, navigation_quick, navigation_fast, navigation_fast_soft, navigation_fast_40]
 
   practice_broker:
     title: Practice MQTT broker
