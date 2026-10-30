@@ -61,7 +61,7 @@ profiles:
   challenge_nav_fast:
     title: "Challenge: Navigation (test: leave at 5.5 s)"
     description: Like Challenge Navigation, but leaves a zone on its own clock 5.5 s after entering it, without a required stop (senior said 5 s in the zone is enough). A zone the refbox did not count comes back later. PC sim only so far
-    command: bash -c 'export REFBOX_BRIDGE_ADDRESS={game_refbox_address} ROBOT_IP={game_robot_topic}; ros2 run ired_refbox mqtt_refbox & exec ros2 launch ired_challenge navigation_challenge.launch.py practice_watchdog:={practice_watchdog} leave_after:=5.5 min_stop:=0.0'
+    command: bash -c 'export REFBOX_BRIDGE_ADDRESS={game_refbox_address} ROBOT_IP={game_robot_topic} REFBOX_POSE_HZ=5; ros2 run ired_refbox mqtt_refbox & exec ros2 launch ired_challenge navigation_challenge.launch.py practice_watchdog:={practice_watchdog} leave_after:=5.5 min_stop:=0.0'
     requires: [robot]
     conflicts: [challenge_nav, challenge_exp, challenge_exp_lidar]
   challenge_exp:
