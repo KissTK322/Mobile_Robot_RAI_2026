@@ -10,7 +10,9 @@ Flow: wait for the game -> leave START through the red zone (rules) -> visit the
 border crossings in a back-and-forth sweep -> at each one, turn to face the
 neighbouring zones that may hold a machine and collect ArUco sightings for `look_time`
 -> report a machine as soon as MachineEstimator says it is solid (only the first
-report counts) -> done when every expected machine is reported.
+report counts) -> a machine seen well from one position only gets a second look right
+away from a point a little along the border -> done when every expected machine is
+reported.
 
 `nav` must provide:
     go_via(points, yaw)  follow waypoints (map frame), keep the heading `yaw`
@@ -52,7 +54,8 @@ def border_route(a, b):
 class ExplorationTask:
     def __init__(self, nav, field, estimator, report, log=print, expected=('C-BS', 'C-CS1'),
                  red_zone='C_Z32', candidate=None, free=None, look_time=1.5, move_timeout=30.0,
-                 look_spread_deg=12.0, final_single_view=True, box_zones=None):
+                 look_spread_deg=12.0, final_single_view=True, box_zones=None, relook_sightings=15,
+                 relook_step=0.32):
         self.nav, self.field, self.est, self.report, self.log = nav, field, estimator, report, log
         self.expected = list(expected)
         self.red_zone = red_zone
@@ -75,6 +78,12 @@ class ExplorationTask:
         self.box_zones = box_zones
         self.focus = None                                    # zones looked at while focused
         self.planned = set()                                 # box zones already queued
+        # second look (field game 2026-10-28: CS1 seen 24x at 41 s from its only reachable crossing,
+        # reported at 218 s after the robot left and came back). A position counts as a new view
+        # from another 0.3 m cell on (MachineEstimator), so relook_step must be over 0.3 m.
+        self.relook_sightings, self.relook_step = relook_sightings, relook_step
+        self.relooked = set()                                # machines that had their second look
+        self.back = None                                     # crossing to return to after a second look
 
     def _set(self, s, now):
         if s != self.state:
@@ -127,6 +136,30 @@ class ExplorationTask:
                 self.log(f"Reported {e['machine']}: {e['zone']} rotation {e['rotation']} "
                          f"({e['agreeing']} agreeing sightings, {e['views']} views)")
 
+    def _relook(self):
+        """(machine, point, heading) for a second look from next to self.here, or None.
+
+        Only for a machine solid but for its second view. Steps along the border lines, so the
+        point is as safe as the lanes; the one seeing the same marker most head-on wins."""
+        for e in self.est.all():
+            if (not e or e['machine'] in self.reported or e['machine'] not in self.expected
+                    or e['machine'] in self.relooked or e['agreeing'] < self.relook_sightings
+                    or not e['well_inside'] or not e['plausible'] or e['ready']):
+                continue
+            mx, my, face = self.est.last_marker[e['machine']]
+            best = None
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                q = (self.here[0] + dx * self.relook_step, self.here[1] + dy * self.relook_step)
+                d = math.dist(q, (mx, my))
+                if not self.free(q) or d < 0.45 or d > 1.2 or math.dist(q, (e['x'], e['y'])) < 0.5:
+                    continue
+                score = ((q[0] - mx) * math.cos(face) + (q[1] - my) * math.sin(face)) / d
+                if score > 0.2 and (best is None or score > best[0]):
+                    best = (score, q)
+            if best:
+                return e['machine'], best[1], math.atan2(my - best[1][1], mx - best[1][0])
+        return None
+
     def _box_crossings(self, zones, start):
         """Inner crossings at the corners of `zones`, nearest-first from start."""
         pts = []
@@ -170,8 +203,11 @@ class ExplorationTask:
             p = self.queue.pop(0)
             if not self._looks_at(p):
                 continue                                     # nothing left to see from there
-            start = self.here if self.here is not None else (pose[0], pose[1])
+            start = self.back or self.here or (pose[0], pose[1])
             pts = border_route(start, p) if self.here is not None else [(pose[0], pose[1]), p]
+            if self.back and self.here is not None:
+                pts = [self.here] + pts                      # back onto the crossing first
+            self.back = None
             self.target = p
             self.route, self.resends = list(pts), 0
             self.nav.go_via(pts, pose[2])
@@ -230,7 +266,8 @@ class ExplorationTask:
         if self.state == MOVE:
             if st == 'succeeded' or (st != 'active' and math.dist(pose[:2], self.target) < 0.2):
                 self.here = self.target
-                self.looks = self._looks_at(self.target)
+                if self.back is None:
+                    self.looks = self._looks_at(self.target)
                 self._look(now)
             elif st == 'failed' and self.resends < 3 and now - self.t_state > 1.0:
                 # DWB aborts some drives on the way ("Resulting plan has 0 poses"): send the
@@ -263,5 +300,17 @@ class ExplorationTask:
             self.nav.turn_to(self.heading)
             self.t_state = now
             self.state = LOOK
-        else:
-            self._next((self.here[0], self.here[1], self.heading if self.heading is not None else 0.0), now)
+            return
+        pose = (self.here[0], self.here[1], self.heading if self.heading is not None else 0.0)
+        again = self._relook() if self.back is None else None
+        if again:
+            machine, q, h = again
+            self.relooked.add(machine)
+            self.log(f'{machine} seen from one position only: second look from ({q[0]:.2f}, {q[1]:.2f})')
+            self.back, self.target = self.here, q
+            self.looks = [h - self.look_spread, h, h + self.look_spread] if self.look_spread else [h]
+            self.route, self.resends = [self.here, q], 0
+            self.nav.go_via([self.here, q], pose[2])
+            self._set(MOVE, now)
+            return
+        self._next(pose, now)

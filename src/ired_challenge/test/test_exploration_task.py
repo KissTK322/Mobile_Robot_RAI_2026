@@ -225,3 +225,65 @@ def test_one_view_machine_reported_when_the_sweep_ends(final_single_view, n_sigh
     task.state = 'LOOK'
     task._next((robot.x, robot.y, robot.yaw), 100.0)            # empty queue: sweep finished
     assert task.state == DONE and reports == expected
+
+
+class StubNav:
+    def __init__(self):
+        self.calls, self.st = [], 'succeeded'
+
+    def go_via(self, points, yaw):
+        self.calls.append(('go', list(points)))
+
+    def turn_to(self, yaw):
+        self.calls.append(('turn', yaw))
+
+    def state(self):
+        return self.st
+
+    def cancel(self):
+        pass
+
+
+def seen_task():
+    """CS1 in C_Z54 rotation 270: marker 102 seen 20x from crossing (4, 3) only, like the field game."""
+    est = MachineEstimator(F)
+    for _ in range(20):
+        est.add((4.0, 3.0, math.atan2(0.4, 0.5)), 102, (0.64, 0.0), -128.66)
+    reports = []
+    nav = StubNav()
+    t = ExplorationTask(nav, F, est, lambda m, x, y, r: reports.append((m, x, y, r)) or True, log=lambda m: None,
+                        expected=['C-CS1'])
+    t.red_done, t.here, t.heading, t.queue = True, (4.0, 3.0), 0.0, [(1.0, 1.0)]
+    return t, est, nav, reports
+
+
+def test_marker_seen_from_one_position_gets_a_second_look_at_once():
+    t, est, nav, reports = seen_task()
+    e = est.estimate('C-CS1')
+    assert e['zone'] == 'C_Z54' and e['agreeing'] == 20 and not e['ready']
+    t._look(0.0)
+    assert t.state == 'MOVE' and nav.calls[-1] == ('go', [(4.0, 3.0), (4.0, 2.68)])
+    t.update(1.0, True, (4.0, 2.68, 0.0))                  # arrived: turns to the marker
+    assert t.state == 'LOOK' and nav.calls[-1][0] == 'turn'
+    est.add((4.0, 2.68, math.atan2(0.72, 0.5)), 102, (0.876, 0.0), -145.2)
+    t.update(2.0, True, (4.0, 2.68, 0.0))
+    assert [r[0] for r in reports] == ['C-CS1']
+
+
+def test_only_one_second_look_and_the_route_returns_over_the_crossing():
+    t, est, nav, reports = seen_task()
+    t._look(0.0)
+    t.update(1.0, True, (4.0, 2.68, 0.0))
+    t.looks, t.t_still = [], None
+    t._look(2.0)                                           # nothing new seen from there
+    assert 'C-CS1' in t.relooked and t.state == 'MOVE'
+    assert nav.calls[-1] == ('go', [(4.0, 2.68), (4.0, 3.0), (1.0, 3.0), (1.0, 1.0)])
+
+
+def test_unreachable_second_look_point_moves_on():
+    t, est, nav, reports = seen_task()
+    t._look(0.0)
+    nav.st = 'failed'
+    t.resends = 3
+    t.update(5.0, True, (4.0, 3.0, 0.0))
+    assert t.state == 'MOVE' and t.back is None

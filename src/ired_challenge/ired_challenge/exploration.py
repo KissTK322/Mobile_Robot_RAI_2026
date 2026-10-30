@@ -135,6 +135,7 @@ class MachineEstimator:
         self.refbox_rules, self.max_snap_deg = refbox_rules, max_snap_deg
         self.sightings = defaultdict(list)       # machine -> [(cx, cy, input_dir)]
         self.views = defaultdict(set)            # machine -> robot positions rounded to 0.3 m
+        self.last_marker = {}                    # machine -> (x, y, face_dir) of the last marker seen
 
     def add(self, robot_pose, marker_id, pos_base, marker_yaw_deg):
         """Add one detection. Returns the machine name or None if ignored."""
@@ -144,6 +145,7 @@ class MachineEstimator:
             return None                          # far detections are too noisy
         name, side = self.markers[marker_id]
         m = marker_in_map(robot_pose, pos_base, marker_yaw_deg)
+        self.last_marker[name] = m
         self.sightings[name].append(machine_from_marker(m, side))
         self.views[name].add((round(robot_pose[0] / 0.3), round(robot_pose[1] / 0.3)))
         return name
