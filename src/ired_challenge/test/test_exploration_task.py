@@ -287,3 +287,15 @@ def test_unreachable_second_look_point_moves_on():
     t.resends = 3
     t.update(5.0, True, (4.0, 3.0, 0.0))
     assert t.state == 'MOVE' and t.back is None
+
+
+def test_second_look_keeps_the_marker_in_front_of_the_lens():
+    """Sim s3: (0.68, 3.00) next to C_Z13 left the lens 0.18 m from the marker, nothing was read."""
+    est = MachineEstimator(F)
+    for _ in range(20):                                     # box in C_Z13, marker on its +y face
+        est.add((1.0, 3.0, math.atan2(-0.4, -0.5)), 102, (0.64, 0.0), 231.34)
+    t = ExplorationTask(StubNav(), F, est, lambda *a: True, log=lambda m: None, expected=['C-CS1'])
+    t.here = (1.0, 3.0)
+    machine, q, h = t._relook()
+    assert math.dist(q, est.last_marker['C-CS1'][:2]) >= 0.55 and q != (0.68, 3.0)
+

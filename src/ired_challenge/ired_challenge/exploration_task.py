@@ -151,7 +151,8 @@ class ExplorationTask:
             for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
                 q = (self.here[0] + dx * self.relook_step, self.here[1] + dy * self.relook_step)
                 d = math.dist(q, (mx, my))
-                if not self.free(q) or d < 0.45 or d > 1.2 or math.dist(q, (e['x'], e['y'])) < 0.5:
+                # d >= 0.55: the lens is 0.26 m ahead of the robot; field game: read at 0.31 m from the lens
+                if not self.free(q) or d < 0.55 or d > 1.2 or math.dist(q, (e['x'], e['y'])) < 0.5:
                     continue
                 score = ((q[0] - mx) * math.cos(face) + (q[1] - my) * math.sin(face)) / d
                 if score > 0.2 and (best is None or score > best[0]):
