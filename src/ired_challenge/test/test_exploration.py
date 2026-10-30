@@ -142,3 +142,13 @@ def test_machine_in_an_impossible_zone_is_not_reported():
             est.add(robot, 102, pos, yaw)
     e = est.estimate('C-CS1')
     assert e['zone'] == 'C_Z32' and not e['plausible'] and not e['ready']
+
+
+def test_rules_allow_every_placement_seen_from_the_real_refbox():
+    """Boxes the refbox placed at the field on 2026-10-28 (machine, zone, rotation)."""
+    from ired_challenge.exploration import allowed_rotations
+    seen = [('C-BS', 'C_Z25', 0), ('C-CS1', 'C_Z33', 135), ('C-BS', 'C_Z12', 270), ('C-CS1', 'C_Z23', 90),
+            ('C-BS', 'C_Z24', 90), ('C-CS1', 'C_Z54', 270), ('C-BS', 'C_Z35', 0), ('C-CS1', 'C_Z14', 270),
+            ('C-BS', 'C_Z35', 180), ('C-CS1', 'C_Z44', 0), ('C-BS', 'C_Z44', 90), ('C-CS1', 'C_Z43', 90)]
+    for machine, zone, rotation in seen:
+        assert rotation in allowed_rotations(zone, machine)

@@ -81,7 +81,7 @@ class ExplorationNode(Node):
             ('expected', ['C-BS', 'C-CS1']), ('skip_zones', ['C_Z31', 'C_Z41', 'C_Z51', 'C_Z32']),
             ('look_time', 1.5), ('look_spread_deg', 12.0), ('final_single_view', True),
             ('wall_clearance', 0.30), ('rate', 10.0),
-            ('min_sightings', 10), ('min_views', 2), ('max_range', 2.0), ('refbox_rules', False),
+            ('min_sightings', 10), ('min_views', 2), ('max_range', 2.0), ('refbox_rules', True),
             ('map_frame', 'map'), ('base_frame', 'base_footprint'), ('cmd_vel_topic', '/cmd_vel'),
             ('practice_watchdog', False),
             # 'lidar': stacked (~40 cm) boxes show up in the scan; look at them first, then sweep
