@@ -17,7 +17,8 @@ STEPS = [('estop', 'STOP released'), ('robot', 'Robot mode + wheel board + LiDAR
 START = (4.5, 0.5, math.pi)
 
 
-CHALLENGES = {'navigation': 'challenge_nav', 'exploration': 'challenge_exp', 'exploration_lidar': 'challenge_exp_lidar'}
+# Exploration = LiDAR search (user 2026-10-30; it falls back to the sweep by itself), sweep kept as plan B
+CHALLENGES = {'navigation': 'challenge_nav', 'exploration': 'challenge_exp_lidar', 'exploration_sweep': 'challenge_exp'}
 
 
 class FieldPrep:
@@ -40,7 +41,7 @@ class FieldPrep:
 
     def start(self, mode):
         if mode not in CHALLENGES:
-            raise ValueError('Mode must be navigation, exploration or exploration_lidar')
+            raise ValueError('Mode must be navigation, exploration or exploration_sweep')
         with self.lock:
             if self.busy:
                 raise ValueError('Already preparing')

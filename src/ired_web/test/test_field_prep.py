@@ -68,16 +68,16 @@ def test_refuses_practice_source_and_stop():
     assert 'STOP' in run(h)['error'] and not h.calls
 
 
-def test_exploration_starts_camera_and_exp_challenge():
+def test_exploration_starts_camera_and_lidar_challenge():
     h = Hub()
     s = run(h, 'exploration')
-    assert s['done'] and ('start', 'camera') in h.calls and ('start', 'challenge_exp') in h.calls
-
-
-def test_exploration_lidar_starts_camera_and_lidar_challenge():
-    h = Hub()
-    s = run(h, 'exploration_lidar')
     assert s['done'] and ('start', 'camera') in h.calls and ('start', 'challenge_exp_lidar') in h.calls
+
+
+def test_exploration_sweep_stays_available_as_plan_b():
+    h = Hub()
+    s = run(h, 'exploration_sweep')
+    assert s['done'] and ('start', 'camera') in h.calls and ('start', 'challenge_exp') in h.calls
 
 
 def test_wrong_place_is_reported():

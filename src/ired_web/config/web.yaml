@@ -65,7 +65,7 @@ profiles:
     requires: [robot]
     conflicts: [challenge_nav, challenge_exp_lidar]
   challenge_exp_lidar:
-    title: "Challenge: Exploration (LiDAR)"
+    title: "Challenge: Exploration (LiDAR, default)"
     description: Like Challenge Exploration, but first looks where the LiDAR sees boxes (stacked ~40 cm boxes only), then sweeps the rest
     command: bash -c 'export REFBOX_BRIDGE_ADDRESS={game_refbox_address} ROBOT_IP={game_robot_topic}; ros2 run ired_refbox mqtt_refbox & exec ros2 run ired_challenge exploration_challenge --ros-args -p practice_watchdog:={practice_watchdog} -p search_mode:=lidar'
     requires: [robot]
