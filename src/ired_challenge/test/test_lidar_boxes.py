@@ -78,3 +78,16 @@ def test_exploration_looks_at_lidar_boxes_first():
     t._next((2.5, 1.5, 0.0), 0.0)
     assert nav.sent[-1] in [(1.0, 3.0), (1.0, 2.0)]          # a corner of C_Z13 first
     assert t.focus == {'C_Z13'}
+
+
+def test_cluster_away_from_a_zone_centre_is_not_a_box():
+    """Field 2026-10-28: leftovers of the top wall and the START fence looked like box-sized clusters."""
+    b = BoxFinder(F)
+    fence = [(3.30 + i * 0.03, 1.02) for i in range(8)]             # near C_Z42's lower edge
+    for _ in range(8):
+        b.add(fence, (3.0, 2.5))
+    assert b.zones() == set()
+    box = [(3.42 + i * 0.03, 3.40) for i in range(6)]               # front face of a box in C_Z44
+    for _ in range(8):
+        b.add(box, (3.5, 2.5))
+    assert b.zones() == {'C_Z44'}

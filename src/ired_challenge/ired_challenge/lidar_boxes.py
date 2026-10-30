@@ -12,10 +12,13 @@ import numpy as np
 
 class BoxFinder:
     def __init__(self, field, wall_dist=0.12, eps=0.10, min_points=3, max_extent=0.42, min_scans=5,
-                 field_margin=0.12):
+                 field_margin=0.12, centre_tol=0.25):
         self.field = field
         self.wall_dist, self.eps, self.min_points = wall_dist, eps, min_points
         self.max_extent, self.min_scans, self.margin = max_extent, min_scans, field_margin
+        # a box stands at a zone centre. Field game 2026-10-28: the two boxes landed 2-5 cm from it
+        # (sd 7-10 cm) while the false zones were bits of wall and START fence 0.4 m and more away
+        self.centre_tol = centre_tol
         self.walls = np.zeros((0, 2))
         self.counts = {}
 
@@ -65,7 +68,7 @@ class BoxFinder:
             n = np.linalg.norm(d)
             centre = m + (d / n * 0.07 if n > 1e-6 else 0)
             zone = f.zone_at(centre[0], centre[1])
-            if zone:
+            if zone and math.dist(centre, f.center(zone)) <= self.centre_tol:
                 seen.add(zone)
         for z in seen:
             self.counts[z] = self.counts.get(z, 0) + 1
