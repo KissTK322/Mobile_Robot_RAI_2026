@@ -299,3 +299,23 @@ def test_second_look_keeps_the_marker_in_front_of_the_lens():
     machine, q, h = t._relook()
     assert math.dist(q, est.last_marker['C-CS1'][:2]) >= 0.55 and q != (0.68, 3.0)
 
+
+def test_box_next_to_the_one_the_lidar_saw_is_still_found_by_the_sweep():
+    """Found by the placement scan: C_Z42 is visible only from crossings the C_Z43 focus had used up."""
+    boxes = [('BS', 'C_Z43', 0), ('CS1', 'C_Z42', 0)]
+    rng = random.Random(1)
+    robot = FakeRobot((4.5, 0.5), math.pi)
+    est = MachineEstimator(F)
+    reports = []
+    task = ExplorationTask(robot, F, est, lambda m, x, y, r: reports.append(m) or True, log=lambda s: None,
+                           free=lambda p: 0.3 < p[0] < 4.7 and 0.3 < p[1] < 4.7 and (p[1] > 1.3 or p[0] < 1.7),
+                           box_zones=lambda: {'C_Z43'})
+    t = 0.0
+    while t < 500 and task.state != DONE:
+        for mid, pos, face in camera(robot, boxes, rng, cam_x=0.25, hfov=math.radians(35.5)):
+            est.add((robot.x, robot.y, robot.yaw), mid, pos, face)
+        task.update(t, True, (robot.x, robot.y, robot.yaw))
+        robot.step(0.1)
+        t += 0.1
+    assert sorted(reports) == ['C-BS', 'C-CS1']
+

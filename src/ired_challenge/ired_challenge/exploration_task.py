@@ -78,6 +78,7 @@ class ExplorationTask:
         self.box_zones = box_zones
         self.focus = None                                    # zones looked at while focused
         self.planned = set()                                 # box zones already queued
+        self.seen_from = set()                               # (crossing, zone) already looked at
         # second look (field game 2026-10-28: CS1 seen 24x at 41 s from its only reachable crossing,
         # reported at 218 s after the robot left and came back). A position counts as a new view
         # from another 0.3 m cell on (MachineEstimator), so relook_step must be over 0.3 m.
@@ -109,10 +110,17 @@ class ExplorationTask:
                 zone = self.field.zone_at(p[0] + dx, p[1] + dy)
                 if self.focus is not None and zone not in self.focus:
                     continue
-                if zone and self.candidate(zone) and not self._zone_done(zone):
+                if zone and self.candidate(zone) and not self._zone_done(zone) and (p, zone) not in self.seen_from:
                     h = math.atan2(dy, dx)
                     out += [h - self.look_spread, h, h + self.look_spread] if self.look_spread else [h]
         return out
+
+    def _mark_seen(self, p):
+        for dx in (-0.5, 0.5):
+            for dy in (-0.5, 0.5):
+                zone = self.field.zone_at(p[0] + dx, p[1] + dy)
+                if zone and (self.focus is None or zone in self.focus):
+                    self.seen_from.add((p, zone))
 
     def _zone_done(self, zone):
         return any(r['zone'] == zone for r in self.reported.values())
@@ -189,7 +197,9 @@ class ExplorationTask:
         self.planned |= new
         self.focus = (self.focus or set()) | new
         front = self._box_crossings(new, (pose[0], pose[1]))
-        self.queue = front + ['END_FOCUS'] + [p for p in self.queue if p not in front and p != 'END_FOCUS']
+        # the crossings stay in the sweep: in focus they looked only at the box zones, and a box next to
+        # one the LiDAR missed may be visible from nowhere else (all 2080 placements scanned, 2026-10-31)
+        self.queue = front + ['END_FOCUS'] + [p for p in self.queue if p != 'END_FOCUS']
         self.log(f'LiDAR sees boxes in {sorted(new)}: looking there first')
 
     def _next(self, pose, now):
@@ -269,6 +279,7 @@ class ExplorationTask:
                 self.here = self.target
                 if self.back is None:
                     self.looks = self._looks_at(self.target)
+                    self._mark_seen(self.target)
                 self._look(now)
             elif st == 'failed' and self.resends < 3 and now - self.t_state > 1.0:
                 # DWB aborts some drives on the way ("Resulting plan has 0 poses"): send the
