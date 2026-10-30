@@ -139,7 +139,7 @@ function renderFieldPrep(d) {
 }
 document.getElementById('field-prep-nav').onclick=()=>rbAction('field_prepare',{mode:'navigation'});
 document.getElementById('field-prep-exp').onclick=()=>rbAction('field_prepare',{mode:'exploration'});
-document.getElementById('field-prep-sweep').onclick=()=>rbAction('field_prepare',{mode:'exploration_lidar'});
+document.getElementById('field-prep-sweep').onclick=()=>rbAction('field_prepare',{mode:'exploration_sweep'});
 document.getElementById('field-save').onclick=()=>rbAction('field_refbox',{address:document.getElementById('field-address').value});
 document.getElementById('field-test').onclick=()=>rbAction('field_test',{});
 rb('connect').onclick=()=>rbAction('source',{source:rb('source').value});
