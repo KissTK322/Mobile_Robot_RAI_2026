@@ -227,7 +227,15 @@ class ExplorationTask:
                 front.append(q)
         # the crossings stay in the sweep: in focus they looked only at the box zones, and a box next to
         # one the LiDAR missed may be visible from nowhere else (all 2080 placements scanned, 2026-10-31)
-        self.queue = front + ['END_FOCUS'] + [p for p in self.queue if p != 'END_FOCUS']
+        # earlier box zones keep their crossings in the focus: before 2026-11-12 a second box zone moved
+        # END_FOCUS in front of them, so the first box was then looked at only by the slow sweep (robot game:
+        # C_Z33 seen by the LiDAR at 19 s, read at 122 s)
+        if 'END_FOCUS' in self.queue:
+            i = self.queue.index('END_FOCUS')
+            old_focus, rest = self.queue[:i], self.queue[i + 1:]
+        else:
+            old_focus, rest = [], list(self.queue)
+        self.queue = front + [p for p in old_focus if p not in front] + ['END_FOCUS'] + rest
         self.log(f'LiDAR sees boxes in {sorted(new)}: looking there first')
 
     def _route(self, a, b):

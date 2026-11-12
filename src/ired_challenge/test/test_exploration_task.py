@@ -357,3 +357,18 @@ def test_failed_way_back_does_not_loop():
     t.update(5.0, True, (2.0, 1.5, 0.0))
     assert t.last_ok is None and t.target == (2.0, 2.0) and len(nav.calls) == 1
 
+
+def test_a_second_lidar_box_keeps_the_first_in_focus():
+    """Robot game 2026-11-12: C_Z33 first, then C_Z14; C_Z33's crossings fell behind END_FOCUS."""
+    found = [{'C_Z33'}]
+    t = ExplorationTask(StubNav(), F, MachineEstimator(F), lambda *a: True, log=lambda m: None,
+                        box_zones=lambda: found[0])
+    t.queue = [(1.0, 1.0)]
+    t._plan_boxes((2.0, 2.0, 0.0))
+    t.queue.pop(0)                                          # one Z33 crossing visited
+    found[0] = {'C_Z33', 'C_Z14'}
+    t._plan_boxes((2.0, 2.0, 0.0))
+    end = t.queue.index('END_FOCUS')
+    focus = t.queue[:end]
+    assert (3.0, 3.0) in focus and (1.0, 4.0) in focus and t.focus == {'C_Z33', 'C_Z14'}
+
