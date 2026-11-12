@@ -78,9 +78,9 @@ profiles:
     conflicts: [challenge_nav, challenge_exp, challenge_nav_fast]
   record:
     title: Record (rosbag)
-    description: Records driving data to ~/bags while Navigation runs (for finding why the robot stalls)
+    description: Records driving data, ArUco detections and the challenge state to ~/bags (for finding why the robot stalls or misses a marker)
     # small topics only (no images, no particle cloud, local costmap at 2 Hz): about 0.2-0.5 MB/s
-    command: bash -c 'mkdir -p $HOME/bags && exec ros2 bag record -o $HOME/bags/nav-$(date +%Y%m%d-%H%M%S) /cmd_vel /cmd_vel_nav /cmd_vel_smoothed /collision_monitor_state /odometry/filtered /odom /ired/motor/data /scan_filtered /amcl_pose /goal_pose /initialpose /plan /local_plan /local_costmap/costmap /behavior_tree_log /tf /tf_static'
+    command: bash -c 'mkdir -p $HOME/bags && exec ros2 bag record -o $HOME/bags/nav-$(date +%Y%m%d-%H%M%S) /cmd_vel /cmd_vel_nav /cmd_vel_smoothed /collision_monitor_state /odometry/filtered /odom /ired/motor/data /scan_filtered /amcl_pose /goal_pose /initialpose /plan /local_plan /local_costmap/costmap /behavior_tree_log /tf /tf_static /aruco/detections /challenge/exploration/state /challenge/navigation/state /refbox/navigation_routes'
     requires: [robot]
   navigation_omni:
     title: Navigation (omni)
