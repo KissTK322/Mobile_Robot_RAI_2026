@@ -574,7 +574,12 @@ class Manager:
 
     def challenge_profile(self):
         """The challenge program for the prepared practice game (exploration or navigation)."""
-        return 'challenge_exp' if self.practice.game.mode() == 'exploration' else 'challenge_nav'
+        # LiDAR search by default (2026-11-15), like the field Prepare button; a sweep or test-fast challenge
+        # started by hand on Launch is used as it is
+        running = lambda n: n in self.profiles and self.profiles[n].info()['state'] == 'running'
+        if self.practice.game.mode() == 'exploration':
+            return 'challenge_exp' if running('challenge_exp') else 'challenge_exp_lidar'
+        return 'challenge_nav_fast' if running('challenge_nav_fast') else 'challenge_nav'
 
     def stop_challenges(self):
         for name in ('challenge_nav', 'challenge_nav_fast', 'challenge_exp', 'challenge_exp_lidar'):
@@ -591,7 +596,7 @@ class Manager:
             reasons.append('Start Robot on Launch')
         if not any(n.startswith('navigation') and p.info()['state'] == 'running' for n, p in self.profiles.items()):
             reasons.append('Start Navigation (soft-stop) on Launch')
-        exploring = self.challenge_profile() == 'challenge_exp'
+        exploring = self.challenge_profile().startswith('challenge_exp')
         if exploring and self.profiles['camera'].info()['state'] != 'running':
             reasons.append('Start Camera + ArUco on Launch (exploration)')
         if self.profiles[self.challenge_profile()].info()['state'] != 'running':
