@@ -42,14 +42,17 @@ class FieldPrep:
                     'steps': [dict(s) for s in self.steps]}
 
     def start(self, mode):
-        if mode not in CHALLENGES:
-            raise ValueError('Mode must be ' + ', '.join(CHALLENGES))
+        # 'practice': the same steps for a practice game on this robot; its challenge (LiDAR exploration or
+        # navigation) follows the practice game's mode
+        if mode not in CHALLENGES and mode != 'practice':
+            raise ValueError('Mode must be ' + ', '.join(list(CHALLENGES) + ['practice']))
         with self.lock:
             if self.busy:
                 raise ValueError('Already preparing')
+            self.chal = self.hub.practice_challenge() if mode == 'practice' else CHALLENGES[mode]
             self.busy, self.mode, self.done, self.error = True, mode, False, ''
             self.steps = [{'key': k, 'label': l, 'state': 'pending', 'msg': ''} for k, l in STEPS
-                          if k != 'camera' or mode.startswith('exploration')]
+                          if k != 'camera' or self.chal.startswith('challenge_exp')]
         threading.Thread(target=self.run, daemon=True).start()
         return self.status()
 
@@ -71,8 +74,11 @@ class FieldPrep:
 
     def run(self):
         h = self.hub
+        self.chal = h.practice_challenge() if self.mode == 'practice' else CHALLENGES[self.mode]
         try:
-            if h.source() != 'field':
+            if self.mode == 'practice' and h.source() != 'practice':
+                raise RuntimeError('Game source is Field refbox: choose Practice and press "Use selected source" first')
+            if self.mode != 'practice' and h.source() != 'field':
                 raise RuntimeError('Game source is Practice: choose Field refbox and press "Use selected source" first')
             self._set('estop', 'active')
             if h.estop():
@@ -108,7 +114,7 @@ class FieldPrep:
                     raise RuntimeError(f'{nav} did not become active twice: check its log on the Launch page')
             self._set('nav', 'ok', f'{nav} active')
 
-            if self.mode.startswith('exploration'):
+            if self.chal.startswith('challenge_exp'):
                 self._set('camera', 'active', 'starting')
                 if not h.running('camera'):
                     h.start('camera')
@@ -116,7 +122,7 @@ class FieldPrep:
                     raise RuntimeError('Camera + ArUco did not start: check its log on the Launch page')
                 self._set('camera', 'ok', 'running')
 
-            chal = CHALLENGES[self.mode]
+            chal = self.chal
             self._set('challenge', 'active', 'starting' if not h.running(chal) else 'already running')
             if not h.running(chal):
                 h.start(chal)

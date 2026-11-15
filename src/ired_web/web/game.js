@@ -130,17 +130,19 @@ function renderFieldPrep(d) {
   const p=d.field_prep, list=document.getElementById('field-prep-steps');
   const field=d.source==='field', busy=!!(p && p.busy) || PRACTICE.pending || d.busy;
   ['field-prep-nav','field-prep-exp','field-prep-sweep','field-prep-test'].forEach(id=>{const b=document.getElementById(id); b.disabled=!field || busy; b.hidden=!field;});
+  const pp=document.getElementById('field-prep-practice'); pp.hidden=field; pp.disabled=field || busy || !(d.config && d.config.machines);
   if (!p || !p.steps || !p.steps.length) { list.hidden=true; return; }
   list.hidden=false;
   const mark={ok:'✅',bad:'❌',active:'⏳',pending:'·'};
   const items=p.steps.map(st=>{const li=document.createElement('li'); li.textContent=`${mark[st.state]||''} ${st.label}${st.msg ? ' — '+st.msg : ''}`; return li;});
-  if (p.done) { const li=document.createElement('li'); li.textContent='Ready: robot waits on C_Z51. Referee: switch to Production (paused), place the boxes from the list below, then press play.'; items.push(li); }
+  if (p.done) { const li=document.createElement('li'); li.textContent=p.mode==='practice' ? 'Ready: robot waits on C_Z51. Place the boxes from the list below, tick the box and press Start game.' : 'Ready: robot waits on C_Z51. Referee: switch to Production (paused), place the boxes from the list below, then press play.'; items.push(li); }
   list.replaceChildren(...items);
 }
 document.getElementById('field-prep-nav').onclick=()=>rbAction('field_prepare',{mode:'navigation'});
 document.getElementById('field-prep-exp').onclick=()=>rbAction('field_prepare',{mode:'exploration'});
 document.getElementById('field-prep-sweep').onclick=()=>rbAction('field_prepare',{mode:'exploration_sweep'});
 document.getElementById('field-prep-test').onclick=()=>rbAction('field_prepare',{mode:'navigation_test'});
+document.getElementById('field-prep-practice').onclick=()=>rbAction('field_prepare',{mode:'practice'});
 document.getElementById('field-save').onclick=()=>rbAction('field_refbox',{address:document.getElementById('field-address').value});
 document.getElementById('field-test').onclick=()=>rbAction('field_test',{});
 rb('connect').onclick=()=>rbAction('source',{source:rb('source').value});

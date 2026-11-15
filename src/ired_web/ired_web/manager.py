@@ -266,6 +266,9 @@ class FieldPrepHub:
     def running(self, name):
         return self.m.profiles[name].info()['state'] == 'running'
 
+    def practice_challenge(self):
+        return self.m.challenge_profile()
+
     def running_nav(self):
         return next((n for n, p in self.m.profiles.items() if n.startswith('navigation') and p.info()['state'] == 'running'), None)
 

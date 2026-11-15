@@ -15,6 +15,7 @@ class Hub:
         self.calls, self.on = [], set()
         self.nav_checks, self.nav_ok_after, self.pose_value = 0, nav_ok_after, pose
         self.src, self.stop_on = 'field', False
+        self.practice_chal = 'challenge_exp_lidar'
         self.pose_sent = False
     def source(self): return self.src
     def estop(self): return self.stop_on
@@ -27,6 +28,7 @@ class Hub:
         self.nav_checks += 1
         return self.nav_ok_after is not None and self.nav_checks >= self.nav_ok_after
     def challenge_ready(self, mode): return any(n.startswith('challenge') for n in self.on)
+    def practice_challenge(self): return self.practice_chal
     def send_start_pose(self, *p): self.calls.append(('pose',)); self.pose_sent = True
     def pose(self): return self.pose_value if self.pose_sent else (0.0, 0.0, 0.0)
 
@@ -93,7 +95,21 @@ def test_every_prepare_button_sends_a_known_mode():
     from ired_web.field_prep import CHALLENGES
     js = open(os.path.join(os.path.dirname(__file__), '..', 'web', 'game.js')).read()
     modes = set(re.findall(r"field_prepare',\{mode:'(\w+)'\}", js))
-    assert modes == set(CHALLENGES)
+    assert modes == set(CHALLENGES) | {'practice'}
+
+
+def test_practice_prepare_starts_the_practice_challenge():
+    h = Hub(); h.src = 'practice'
+    s = run(h, 'practice')
+    assert s['done'] and ('start', 'camera') in h.calls and ('start', 'challenge_exp_lidar') in h.calls
+    h = Hub(); h.src = 'practice'; h.practice_chal = 'challenge_nav'
+    s = run(h, 'practice')
+    assert s['done'] and ('start', 'camera') not in h.calls and ('start', 'challenge_nav') in h.calls
+
+
+def test_practice_prepare_refuses_the_field_source():
+    h = Hub()
+    assert 'Practice' in run(h, 'practice')['error'] and not h.calls
 
 
 def test_wrong_place_is_reported():
