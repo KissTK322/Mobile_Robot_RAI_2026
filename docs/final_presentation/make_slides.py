@@ -270,3 +270,49 @@ def bench():
 
 if __name__ == '__main__':
     bench()
+
+
+def performance():
+    import json
+    rows = [json.loads(l) for l in open(f'{OUT}/pi_load.jsonl')]
+    names = {'idle': 'web app\nonly', 'robot': '+ Robot\n(drivers, EKF)', 'robot+nav': '+ Nav2\nAMCL', 'robot+nav+camera': '+ camera\nArUco',
+             'full-stack': '+ challenge\n(LiDAR boxes)', 'stream-curl': '+ live\ncamera view'}
+    rows = [r for r in rows if r['label'] in names]
+    im, d = slide('HOW HARD DOES THE PI 5 WORK?', 'Measured on the robot: all game programs running, robot standing still, 3 extra fans')
+
+    def chart(ax):
+        x = range(len(rows))
+        ax.bar(x, [r['cpu_total_pct'] for r in rows], color='#f2b33d', width=.6)
+        for i, r in enumerate(rows):
+            ax.text(i, r['cpu_total_pct'] + 1.5, f"{r['cpu_total_pct']:.0f} %", ha='center', color='white', fontsize=15, weight='bold')
+        ax.set_xticks(list(x)); ax.set_xticklabels([names[r['label']] for r in rows], fontsize=12)
+        ax.set_ylim(0, 100); ax.set_ylabel('CPU, all 4 cores (%)'); ax.grid(axis='y', color='#333333')
+        t = ax.twinx()
+        t.plot(list(x), [r['temp_c'] for r in rows], color='#50c8ff', lw=3, marker='o')
+        t.set_ylim(20, 85); t.set_ylabel('temperature (°C)', color='#50c8ff'); t.tick_params(colors='#50c8ff')
+        t.axhline(80, color='#e5484d', ls='--', lw=1.5); t.text(len(rows) - .5, 81, 'Pi 5 throttles at 80 °C', color='#e5484d', ha='right', fontsize=12)
+        for k in ('top',):
+            t.spines[k].set_visible(False)
+    d.text((90, 220), 'CPU AND TEMPERATURE AS WE ADD EACH PART', fill=MUTE, font=font(22, True))
+    im.paste(chart_png(chart, (930, 600)), (90, 255))
+    full = next(r for r in rows if r['label'] == 'stream-curl')
+    d.text((90, 880), f"Everything on: {full['cpu_total_pct']:.0f} % CPU, {full['temp_c']:.0f} °C, {full['mem_pct']:.0f} % of 4 GB RAM, "
+                      f"no throttling ({full['throttled'].split('=')[1]}), 2.4 GHz", fill=POWER, font=font(24, True))
+    d.text((90, 920), 'Biggest users: Nav2 + AMCL ~70 % of one core, ArUco ~35 %, LiDAR box finder ~25 %.', fill=(200, 200, 200), font=font(22))
+    tips = [('Camera', ['C270 at 640×480 (calibrated size)', 'ArUco detection ~9 frames/s']),
+            ('Live view to the web', ['MJPEG 640×360, JPEG q60: ~21 KB/frame', '~10 fps, ~1.7 Mbit/s, only while tab open']),
+            ('LiDAR first', ['LiDAR finds boxes, camera only confirms', 'no camera sweep of the whole field']),
+            ('Light recording', ['no images in rosbag: ~30 MB per game', 'replay converted in 3 s at low priority']),
+            ('Cooling and power', ['3 fans blow hot air out: 42 °C max', 'USB current limit raised for the camera'])]
+    y = 225
+    for h, (a, b) in tips:
+        d.rounded_rectangle([1080, y, 1830, y + 136], 10, fill=BOX, outline=EDGE, width=2)
+        d.text((1105, y + 16), h, fill=FG, font=font(26, True))
+        d.text((1105, y + 58), a, fill=(215, 215, 215), font=font(22))
+        d.text((1105, y + 92), b, fill=(215, 215, 215), font=font(22))
+        y += 152
+    im.save(f'{OUT}/slide_performance.png')
+
+
+if __name__ == '__main__':
+    performance()
