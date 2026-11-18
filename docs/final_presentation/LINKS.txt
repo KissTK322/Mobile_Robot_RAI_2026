@@ -1,0 +1,25 @@
+iRED Group 5 (AOW LOEY) - final presentation material, 18 Nov 2026
+
+GitHub (code used in the race, README, web guide, slides):
+  https://github.com/KissTK322/Mobile_Robot_RAI_2026/tree/proposal/field-tune-1030
+  slides on GitHub: docs/final_presentation/
+
+3D replay of the race games (Claude artifact, private to the owner's account until shared):
+  https://claude.ai/artifact/HWtQsRWF72U4R88iFHkyQz
+
+3D replay on the robot (same Wi-Fi, PIN):
+  http://robotg5.local:8080/replay.html?bag=nav-20261116-095858   (Navigation race)
+  http://robotg5.local:8080/replay.html?bag=nav-20261116-100745   (Exploration race)
+
+Everything is in this folder (docs/final_presentation) of the GitHub branch above:
+  slide_*.png              9 slide images 1920x1080 for Canva
+  race_*                   route pictures + 2x replay videos of the 16 Nov race games
+  aruco_camera_view.jpg    live camera frame with ArUco overlay; calib_grid.jpg calibration contact sheet
+  calibration_photos/      final_set_640x480 (78), all_attempts_640x480 (200), old_1280x720 (20)
+  extra_images/            web app screenshots (PC test server), 3D replay shots, analysis charts
+  qa_thai.md               Thai Q&A notes; ../WEB_GUIDE.md web guide; ../../README.md project README
+  *.json, pi_load.jsonl    numbers behind the slides
+
+Download on another computer: open
+  https://github.com/KissTK322/Mobile_Robot_RAI_2026/archive/refs/heads/proposal/field-tune-1030.zip
+and unzip; the material is in docs/final_presentation.

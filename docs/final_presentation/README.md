@@ -14,6 +14,9 @@
 | `qa_thai.md` | Q&A practice notes (Thai) |
 | `race_*_route.png` | robot path of the two race games (16 Nov 2026) |
 | `race_*_replay.mp4` | 2× top-down replay of the race games, made from the rosbags (no camera images were recorded) |
+| `calibration_photos/` | all chessboard photos: final set used (78), every attempt (200), old 1280×720 set (20) |
+| `extra_images/` | web app screenshots (PC test server), 3D replay shots, analysis charts |
+| `LINKS.txt` | links: GitHub, 3D replay, replay pages on the robot, download |
 | `race_eval.json`, `games_eval.json` | numbers behind the slides |
 
 Regenerate (on the team PC, bags in `~/ired_work/robot_runs/bags`):
