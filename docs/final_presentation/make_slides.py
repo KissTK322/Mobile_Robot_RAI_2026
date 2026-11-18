@@ -316,3 +316,28 @@ def performance():
 
 if __name__ == '__main__':
     performance()
+
+
+def aruco():
+    im, d = slide('HOW THE CAMERA READS THE MARKERS', 'Live frame from the robot (Logitech C270, 640×480) with the ArUco overlay drawn by our node')
+    cam = Image.open(f'{OUT}/aruco_camera_view.jpg').convert('RGB').resize((960, 720), Image.LANCZOS)
+    d.rounded_rectangle([86, 226, 1050, 950], 8, outline=EDGE, width=4)
+    im.paste(cam, (90, 230))
+    d.text((90, 975), 'Marker 121 (BS output side) read at 1.27 m, 2° · marker 122 (BS input side) on a far box at 3.57 m', fill=POWER, font=font(24, True))
+    steps = [('1  Detect', 'grey image, OpenCV ArUco', 'DICT_ARUCO_ORIGINAL, ~9 frames/s'),
+             ('2  Measure', 'solvePnP with our calibration', 'fx 999.5 px, marker 6.34 cm'),
+             ('3  Name the box', 'ID pair: BS 121/122, CS1 101/102', 'even ID = input side, odd = output'),
+             ('4  Rotation', 'which face we see + its yaw', 'gives the 0/45/.../315° to report'),
+             ('5  Confirm', 'LiDAR gives the box position', 'report only when views agree')]
+    y = 226
+    for h, a, b in steps:
+        d.rounded_rectangle([1110, y, 1830, y + 132], 10, fill=BOX, outline=EDGE, width=2)
+        d.text((1135, y + 16), h, fill=FG, font=font(26, True))
+        d.text((1135, y + 56), a, fill=(215, 215, 215), font=font(22))
+        d.text((1135, y + 90), b, fill=(170, 170, 170), font=font(21))
+        y += 146
+    im.save(f'{OUT}/slide_aruco.png')
+
+
+if __name__ == '__main__':
+    aruco()
