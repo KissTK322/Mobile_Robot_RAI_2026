@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>iRED Replay</title>
+<style>
+/* Control-room view of one 5 x 5 m field: the 3D stage first, the game clock and event log beside it. */
+:root{
+  --bg:#0c1518;--panel:#132126;--line:#2a3e45;--fg:#e7f0f1;--muted:#93a8ad;--accent:#22b3d6;--accent-ink:#04222b;
+  --report:#7be0a3;--lidar:#f2c14e;--look:#ff8f70;
+  --body:system-ui,sans-serif;--num:system-ui,sans-serif;
+  color-scheme:dark}
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.5}
+.wrap{max-width:1280px;margin:0 auto;padding-block:14px 24px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:12px}
+header{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;justify-content:space-between}
+h1{margin:0;font-family:var(--num);font-weight:600;font-size:28px;letter-spacing:.02em}
+.tabs,.chips{display:flex;flex-wrap:wrap;gap:6px}
+button{font:inherit;color:var(--fg);background:var(--panel);border:1px solid var(--line);border-radius:6px;min-height:40px;padding:4px 12px;cursor:pointer}
+button:hover{border-color:var(--accent)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.tab{display:grid;text-align:left;line-height:1.25;padding:6px 12px}
+.tab small{font-size:12px;opacity:.8}
+.main{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:12px}
+.stage{position:relative;background:#091013;border:1px solid var(--line);border-radius:8px;overflow:hidden;height:min(66vh,640px);min-height:320px}
+canvas{display:block;width:100%;height:100%;touch-action:none}
+.hud{position:absolute;left:12px;top:10px;pointer-events:none;display:grid;gap:2px}
+.clock{font-family:var(--num);font-size:42px;font-weight:600;line-height:1;font-variant-numeric:tabular-nums}
+.limit{color:var(--muted);font-size:13px}
+#seenchip{position:absolute;right:12px;top:12px;background:var(--look);color:#2a0f07;border-radius:6px;padding:3px 10px;font-weight:600;font-size:13px}
+#fail{position:absolute;inset:0;display:grid;place-items:center;padding:24px;text-align:center;color:var(--muted)}
+aside{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;display:grid;grid-template-rows:auto auto 1fr;gap:10px;min-width:0;height:min(66vh,640px);min-height:320px}
+.result{font-weight:600}
+.boxes{display:grid;gap:4px}
+.boxrow{display:flex;justify-content:space-between;gap:8px;font-variant-numeric:tabular-nums}
+.boxrow b{font-family:var(--num);font-size:17px;font-weight:600}
+.boxrow span{color:var(--muted)}
+.boxrow.done span{color:var(--report)}
+ol{list-style:none;margin:0;padding:0;overflow-y:auto;scrollbar-color:var(--line) transparent;display:grid;align-content:start;gap:2px}
+li button{width:100%;min-height:0;text-align:left;display:grid;grid-template-columns:44px 1fr;gap:8px;border:0;border-left:3px solid var(--line);border-radius:0;background:none;padding:5px 8px;font-size:14px;opacity:.55}
+li.past button{opacity:1}
+li.now button{background:#1b2f36}
+li button time{font-family:var(--num);font-variant-numeric:tabular-nums;color:var(--muted);font-size:16px}
+li.lidar button{border-left-color:var(--lidar)}li.look button{border-left-color:var(--look)}li.report button{border-left-color:var(--report)}
+.controls{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center}
+#play{min-width:84px;font-weight:600}
+.scrub{position:relative;flex:1 1 280px;min-width:0;display:flex;align-items:center;height:40px}
+input[type=range]{width:100%;accent-color:var(--accent);margin:0}
+.label{color:var(--muted);font-size:13px;align-self:center}
+.legend{display:flex;flex-wrap:wrap;gap:4px 16px;color:var(--muted);font-size:13px}
+.legend i{display:inline-block;width:12px;height:4px;margin-right:6px;vertical-align:middle}
+@media(max-width:860px){.main{grid-template-columns:minmax(0,1fr)}.stage{height:52vh}aside{height:auto;max-height:340px}}
+.bags{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.bags select{font:inherit;color:var(--fg);background:var(--panel);border:1px solid var(--line);border-radius:6px;min-height:40px;padding:4px 8px;max-width:100%}
+#msg{color:var(--muted);font-size:14px}
+a.back{color:var(--accent)}
+</style></head><body>
+<div class="wrap">
+  <header>
+    <h1>iRED Replay</h1>
+    <div class="bags"><select id="bag" aria-label="Recorded bag"></select><button id="open">Open</button><span id="msg"></span><a class="back" href="index.html">Back to control</a></div>
+  </header>
+  <div class="main">
+    <div class="stage" id="stage">
+      <div class="hud"><div class="clock" id="clock">0:00</div><div class="limit">game time from start · limit 10:00</div></div>
+      <div id="seenchip" hidden></div>
+      <div id="fail" hidden>This browser cannot show 3D (WebGL). Try Chrome on another device.</div>
+    </div>
+    <aside>
+      <div class="result" id="result"></div>
+      <div class="boxes" id="boxes"></div>
+      <ol id="events"></ol>
+    </aside>
+  </div>
+  <div class="controls">
+    <button id="play">Play</button>
+    <div class="scrub"><input id="scrub" type="range" min="0" max="1000" value="0" aria-label="Game time"></div>
+    <div class="chips" id="speeds" aria-label="Speed"></div>
+    <div class="chips" id="views" aria-label="View"></div>
+    <button id="lidar" aria-pressed="true">LiDAR points</button>
+  </div>
+  <div class="legend">
+    <span><i style="background:#ff8f70"></i>input side (even id)</span>
+    <span><i style="background:#a58cff"></i>output side (odd id)</span>
+    <span><i style="background:#22b3d6"></i>robot path</span>
+    <span id="lg-lidar"><i style="background:#f2c14e"></i>LiDAR points</span>
+  </div>
+</div>
+<!-- gl3d.min.js = three.js r128 (MIT), renamed: some browser blockers drop "three.min.js" -->
+<script src="vendor/gl3d.min.js"></script>
+<script src="vendor/OrbitControls.js"></script>
+<script>
+const GAMES=[];let MESH=null;
+const $=id=>document.getElementById(id);
+const IDS={'C-BS':[122,121],'C-CS1':[102,101],'C-CS2':[104,103],'C-RS1':[112,111],'C-RS2':[114,113]};
+const fmt=t=>{t=Math.max(0,t);return Math.floor(t/60)+':'+String(Math.floor(t%60)).padStart(2,'0')};
+const mp=(x,y,z=0)=>new THREE.Vector3(x,z,-y);
+const zoneXY=z=>[+z[3]-.5,+z[4]-.5];
+let gi=0,G=null,t=0,playing=false,speed=2,view='tilt',showLidar=true;
+
+function start(){
+  const stage=$('stage');let R;
+  try{if(!window.THREE)throw 0;R=new THREE.WebGLRenderer({antialias:true});}
+  catch(e){$('fail').hidden=false;return false}
+  R.setPixelRatio(Math.min(devicePixelRatio,2));R.setClearColor(0x091013);stage.prepend(R.domElement);
+  const S=new THREE.Scene(),C=new THREE.PerspectiveCamera(42,1,.05,60);
+  S.add(new THREE.HemisphereLight(0xdff4f7,0x1a262a,.95));
+  const sun=new THREE.DirectionalLight(0xffffff,.65);sun.position.set(2,7,4);S.add(sun);
+  const O=new THREE.OrbitControls(C,R.domElement);O.enableDamping=true;O.maxPolarAngle=1.5;O.target.copy(mp(2.5,2.5));
+
+  const tc=document.createElement('canvas');tc.width=tc.height=1536;const c=tc.getContext('2d'),u=tc.width/5;
+  c.fillStyle='#1d2c31';c.fillRect(0,0,1536,1536);
+  const tint=(x,y,col)=>{c.fillStyle=col;c.fillRect((x-1)*u,(5-y)*u,u,u)};
+  [3,4,5].forEach(x=>tint(x,1,'#26383e'));tint(3,2,'#5b2a2a');
+  c.strokeStyle='#48626a';c.lineWidth=3;for(let i=0;i<=5;i++){c.beginPath();c.moveTo(i*u,0);c.lineTo(i*u,1536);c.moveTo(0,i*u);c.lineTo(1536,i*u);c.stroke()}
+  c.fillStyle='#7f99a0';c.font='600 40px "Barlow Condensed",sans-serif';c.textAlign='center';
+  for(let x=1;x<=5;x++)for(let y=1;y<=5;y++)c.fillText('Z'+x+y,(x-.5)*u,(5-y+.5)*u+56);
+  const ftex=new THREE.CanvasTexture(tc);ftex.anisotropy=8;
+  const floor=new THREE.Mesh(new THREE.PlaneGeometry(5,5),new THREE.MeshLambertMaterial({map:ftex}));
+  floor.rotation.x=-Math.PI/2;floor.position.copy(mp(2.5,2.5));S.add(floor);
+  const wallM=new THREE.MeshLambertMaterial({color:0x56717a});
+  const wall=(x1,y1,x2,y2)=>{const w=Math.abs(x2-x1)+.03,d=Math.abs(y2-y1)+.03,m=new THREE.Mesh(new THREE.BoxGeometry(w,.4,d),wallM);m.position.copy(mp((x1+x2)/2,(y1+y2)/2,.2));S.add(m)};
+  wall(0,0,5,0);wall(0,5,5,5);wall(0,0,0,5);wall(5,0,5,5);wall(2,0,2,1);wall(2.9,1,5,1);
+
+  const robot=new THREE.Group(),up=new THREE.Group();up.rotation.x=-Math.PI/2;robot.add(up);S.add(robot);
+  if(MESH){const dv=new DataView(MESH),n=dv.getUint32(80,true),pos=new Float32Array(n*9),nor=new Float32Array(n*9);
+  for(let i=0,o=84;i<n;i++,o+=50){const nx=dv.getFloat32(o,true),ny=dv.getFloat32(o+4,true),nz=dv.getFloat32(o+8,true);
+    for(let v=0;v<3;v++){const p=o+12+v*12;pos[i*9+v*3]=dv.getFloat32(p,true);pos[i*9+v*3+1]=dv.getFloat32(p+4,true);pos[i*9+v*3+2]=dv.getFloat32(p+8,true);nor[i*9+v*3]=nx;nor[i*9+v*3+1]=ny;nor[i*9+v*3+2]=nz}}
+  const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.BufferAttribute(pos,3));geo.setAttribute('normal',new THREE.BufferAttribute(nor,3));
+  const body=new THREE.Mesh(geo,new THREE.MeshLambertMaterial({color:0x9fb4ba}));
+  body.scale.setScalar(.001);body.rotation.z=Math.PI;body.position.set(-.0913,.0019,-.1657);up.add(body);}
+  else{const b=new THREE.Mesh(new THREE.CylinderGeometry(.2,.2,.3,32),new THREE.MeshLambertMaterial({color:0x9fb4ba}));b.position.y=.05;robot.add(b);
+    const nose=new THREE.Mesh(new THREE.BoxGeometry(.18,.05,.05),new THREE.MeshLambertMaterial({color:0x22b3d6}));nose.position.set(.15,.22,0);robot.add(nose)}
+  const coneGeo=new THREE.ConeGeometry(.28,.85,4,1,true);coneGeo.rotateZ(Math.PI/2);coneGeo.rotateX(Math.PI/4);coneGeo.translate(.26+.425,.01,0);
+  const coneM=new THREE.MeshBasicMaterial({color:0xff8f70,transparent:true,opacity:.1,side:THREE.DoubleSide,depthWrite:false});
+  robot.add(new THREE.Mesh(coneGeo,coneM));
+
+  const lidarGeo=new THREE.BufferGeometry();lidarGeo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(1500*3),3));
+  const lidarPts=new THREE.Points(lidarGeo,new THREE.PointsMaterial({color:0xf2c14e,size:.035}));S.add(lidarPts);
+  const trailGeo=new THREE.BufferGeometry();let trail=new THREE.Line(trailGeo,new THREE.LineBasicMaterial({color:0x22b3d6}));S.add(trail);
+  let dyn=new THREE.Group();S.add(dyn);
+
+  function label(text,color){const k=document.createElement('canvas');k.width=420;k.height=96;const x=k.getContext('2d');
+    x.fillStyle=color;x.fillRect(0,0,420,96);x.fillStyle='#071316';x.font='600 54px "Barlow Condensed",sans-serif';x.textAlign='center';x.textBaseline='middle';x.fillText(text,210,50);
+    const s=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(k),depthTest:false}));s.scale.set(.56,.128,1);return s}
+  function marker(id,color){const k=document.createElement('canvas');k.width=k.height=128;const x=k.getContext('2d');x.fillStyle=color;x.fillRect(0,0,128,128);x.fillStyle='#071316';x.font='600 58px "Barlow Condensed",sans-serif';x.textAlign='center';x.textBaseline='middle';x.fillText(id,64,68);
+    return new THREE.Mesh(new THREE.PlaneGeometry(.11,.11),new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(k)}))}
+  const boxObjs={};
+  function load(i){gi=i;G=GAMES[i];if(!G)return;t=-2;S.remove(dyn);dyn=new THREE.Group();S.add(dyn);
+    G.boxes.forEach(b=>{const [x,y]=zoneXY(b.zone),g=new THREE.Group();g.position.copy(mp(x,y));
+      [[0x3f8c9e,.1],[0x2f6c7a,.3]].forEach(([col,h])=>{const m=new THREE.Mesh(new THREE.BoxGeometry(.2,.195,.2),new THREE.MeshLambertMaterial({color:col}));m.position.y=h;g.add(m)});
+      const a=b.rot*Math.PI/180,[inp,out]=IDS[b.name];
+      [[inp,'#ff8f70',a],[out,'#a58cff',a+Math.PI]].forEach(([id,col,d])=>{const m=marker(id,col);m.position.set(Math.cos(d)*.102,.1,-Math.sin(d)*.102);m.rotation.y=d+Math.PI/2;g.add(m)});
+      const l=label(b.name,'#cfe3e6');l.position.y=.56;g.add(l);dyn.add(g);boxObjs[b.name]={l,b,g}});
+    const pts=G.track.filter(p=>p[0]<=G.end+1).map(p=>mp(p[1],p[2],.015));trailGeo.setFromPoints(pts);
+    lidarPts.visible=false;$('lidar').hidden=$('lg-lidar').hidden=!G.lidar.length;
+    $('result').textContent=G.result+' · ends at '+fmt(G.end);
+    $('boxes').innerHTML=G.boxes.map(b=>`<div class="boxrow" data-b="${b.name}"><b>${b.name}</b><span></span></div>`).join('');
+    $('events').innerHTML=G.ev.map((e,j)=>`<li class="${e[1]}"><button data-t="${e[0]}"><time>${fmt(e[0])}</time><span>${e[2]}</span></button></li>`).join('');
+    document.querySelectorAll('#events button').forEach(b=>b.onclick=()=>{t=+b.dataset.t-1.5;sync()});
+    document.querySelectorAll('.tab').forEach((b,j)=>b.setAttribute('aria-pressed',j===i));
+    setView(view);sync()}
+  function poseAt(q){const T=G.track;let a=0,b=T.length-1;if(q<=T[0][0])return T[0];if(q>=T[b][0])return T[b];while(b-a>1){const m=(a+b)>>1;T[m][0]<=q?a=m:b=m}
+    const f=(q-T[a][0])/(T[b][0]-T[a][0]||1);let d=T[b][3]-T[a][3];d=Math.atan2(Math.sin(d),Math.cos(d));return[q,T[a][1]+(T[b][1]-T[a][1])*f,T[a][2]+(T[b][2]-T[a][2])*f,T[a][3]+d*f]}
+  function setView(v){view=v;document.querySelectorAll('#views button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.v===v));
+    O.enabled=v!=='follow';O.target.copy(mp(2.5,2.5));
+    if(v==='top'){C.position.copy(mp(2.5,2.49,8.4))}else if(v==='tilt'){C.position.copy(mp(2.5,-3.0,5.6))}O.update()}
+  function sync(){const p=poseAt(t);robot.position.copy(mp(p[1],p[2],.11));robot.rotation.y=p[3];
+    trailGeo.setDrawRange(0,G.track.filter(q=>q[0]<=Math.min(t,G.end+1)).length);
+    $('clock').textContent=fmt(Math.min(t,G.end));$('scrub').value=Math.round((t+2)/(G.end+6)*1000);
+    let seen=null;for(const s of G.seen)if(s[0]<=t&&t-s[0]<.6)seen=s[1];
+    $('seenchip').hidden=!seen;if(seen)$('seenchip').textContent='camera sees marker '+seen.join(', ');coneM.opacity=seen?.3:.09;
+    if(G.lidar.length&&showLidar){let f=null;for(const s of G.lidar){if(s[0]>t)break;f=s}
+      if(f){const P=lidarGeo.attributes.position,a=f[1],k=Math.min(a.length/2,1500);for(let i=0;i<k;i++)P.setXYZ(i,a[i*2]/100,.3,-a[i*2+1]/100);P.needsUpdate=true;lidarGeo.setDrawRange(0,k);lidarPts.visible=true}else lidarPts.visible=false}else lidarPts.visible=false;
+    G.boxes.forEach(b=>{const ev=G.ev.find(e=>e[1]==='report'&&e[2].includes(b.name+':'));const done=ev&&ev[0]<=t,row=document.querySelector(`[data-b="${b.name}"]`);
+      row.classList.toggle('done',!!done);row.lastChild.textContent=done?`reported ${fmt(ev[0])}`:`${b.zone} ${b.rot}°`;
+      if(boxObjs[b.name].state!==!!done){boxObjs[b.name].state=!!done;const g=boxObjs[b.name].g,o=boxObjs[b.name].l,l=label(b.name+(done?' reported':''),done?'#7be0a3':'#cfe3e6');l.position.y=.56;g.remove(o);g.add(l);boxObjs[b.name].l=l}});
+    let cur=-1;G.ev.forEach((e,j)=>{if(e[0]<=t)cur=j});
+    const L=[...$('events').children];L.forEach((li,j)=>{li.classList.toggle('past',j<=cur);li.classList.toggle('now',j===cur)});
+    if(cur!==sync.cur){sync.cur=cur;if(L[cur]){const o=$('events'),li=L[cur];o.scrollTop=Math.max(0,li.offsetTop-o.offsetTop-o.clientHeight/2)}}}
+  const size=()=>{const w=stage.clientWidth,h=stage.clientHeight;R.setSize(w,h,false);C.aspect=w/h;C.updateProjectionMatrix()};
+  addEventListener('resize',size);new ResizeObserver(size).observe(stage);size();
+  window.showGame=g=>{GAMES[0]=g;load(0);setPlay(true)};
+  [1,2,4,8].forEach(s=>{const b=document.createElement('button');b.textContent=s+'×';b.setAttribute('aria-pressed',s===speed);b.onclick=()=>{speed=s;[...$('speeds').children].forEach(x=>x.setAttribute('aria-pressed',x===b))};$('speeds').append(b)});
+  [['tilt','Tilt'],['top','Top'],['follow','Follow']].forEach(([v,l])=>{const b=document.createElement('button');b.textContent=l;b.dataset.v=v;b.onclick=()=>setView(v);$('views').append(b)});
+  const setPlay=p=>{playing=p;$('play').textContent=p?'Pause':'Play'};setPlay(playing);
+  $('play').onclick=()=>{if(!G)return;if(!playing&&t>=G.end+3)t=-2;setPlay(!playing)};
+  $('scrub').oninput=e=>{if(!G)return;t=e.target.value/1000*(G.end+6)-2;sync()};
+  $('lidar').onclick=e=>{showLidar=!showLidar;e.target.setAttribute('aria-pressed',showLidar);if(G)sync()};
+  let last=performance.now();
+  (function frame(now){const dt=Math.min(.1,(now-last)/1000);last=now;
+    if(G&&playing){t+=dt*speed;if(t>G.end+3){t=G.end+3;setPlay(false)}sync()}
+    if(G&&view==='follow'){const p=poseAt(t),h=p[3];const b=mp(p[1]-Math.cos(h)*1.1,p[2]-Math.sin(h)*1.1,.85);C.position.lerp(b,.08);O.target.lerp(mp(p[1]+Math.cos(h)*.5,p[2]+Math.sin(h)*.5,.15),.12);C.lookAt(O.target)}
+    else O.update();R.render(S,C);requestAnimationFrame(frame)})(last);
+  return true}
+const pin=()=>{try{return localStorage.getItem('ired_pin')||''}catch(e){return ''}};
+async function api(path,body){const r=await fetch('/api/replay/'+path,{method:body?'POST':'GET',headers:{'X-Pin':pin(),'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
+  if(r.status===401)throw new Error('Enter the PIN on the control page first');const ct=r.headers.get('Content-Type')||'';
+  if(!r.ok)throw new Error((await r.json()).error||r.status);return ct.includes('json')?r.json():r.arrayBuffer()}
+let bags=[];
+async function refresh(){try{bags=(await api('list')).bags;const sel=$('bag'),cur=sel.value;
+  sel.innerHTML=bags.map(b=>`<option value="${b.name}">${b.name} · ${b.size_mb} MB · ${b.state==='ready'?'ready':b.state==='converting'?'converting…':b.state==='error'?'failed':'not converted'}</option>`).join('');
+  if(cur)sel.value=cur;const b=bags.find(x=>x.name===sel.value);
+  $('open').textContent=b&&b.state==='ready'?'Open':'Convert';$('open').disabled=!b||b.state==='converting';
+  $('msg').textContent=!bags.length?'No bags in ~/bags (press Record on the Launch page)':b&&b.state==='converting'?'Converting on the robot, about 1 min…':b&&b.error?b.error:'';
+  if(bags.some(x=>x.state==='converting'))setTimeout(refresh,3000)}catch(e){$('msg').textContent=e.message}}
+$('bag').onchange=refresh;
+$('open').onclick=async()=>{const name=$('bag').value,b=bags.find(x=>x.name===name);if(!b)return;
+  try{if(b.state!=='ready'){await api('convert',{name});return refresh()}
+    $('msg').textContent='Loading…';const g=await api('game?name='+encodeURIComponent(name));$('msg').textContent='';window.showGame&&showGame(g)}
+  catch(e){$('msg').textContent=e.message}};
+// replay.html?bag=NAME opens that bag straight away (when it is converted)
+const want=new URLSearchParams(location.search).get('bag');
+api('mesh').then(b=>{MESH=b}).catch(()=>{}).finally(async()=>{start();await refresh();
+  if(want&&bags.some(x=>x.name===want&&x.state==='ready')){$('bag').value=want;await refresh();$('open').click()}});
+</script></body></html>

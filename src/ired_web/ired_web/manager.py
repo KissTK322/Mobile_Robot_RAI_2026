@@ -36,6 +36,7 @@ from std_msgs.msg import String
 from ired_msgs.msg import MotorData
 from ired_web.mapping import MapStore, MapWatch
 from ired_web.practice_runtime import PracticeController
+from ired_web.replay import ReplayStore
 from ired_web.field_prep import FieldPrep
 
 SHARE = get_package_share_directory('ired_web')
@@ -483,6 +484,7 @@ class Manager:
                                     ('/navigate_to_pose/_action/cancel_goal', '/follow_path/_action/cancel_goal')]
         self.practice = PracticeController(os.path.join(cfg['log_dir'], 'practice'), self)
         self.field_prep = FieldPrep(FieldPrepHub(self))
+        self.replay = ReplayStore(cfg.get('bags_dir', '~/bags'), os.path.join(cfg['log_dir'], 'replay'))
         for p in self.profiles.values():
             p.extra = self.profile_fields
 
@@ -1010,6 +1012,8 @@ def make_handler(manager):
                 self.end_headers()
                 self.wfile.write(png)
                 return
+            if parts[:1] == ['replay']:
+                return self.replay_api(method, parts[1:], parse_qs(url.query))
             if method == 'GET' and parts == ['tests']:
                 return self.send_json(200, manager.tests_info())
             if method == 'POST' and parts == ['tests', 'run']:
@@ -1033,6 +1037,40 @@ def make_handler(manager):
                 self.wfile.write(body)
                 return
             return self.send_json(404, {'error': 'unknown endpoint'})
+
+        def send_bytes(self, body, ctype):
+            self.send_response(200)
+            self.send_header('Content-Type', ctype)
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def replay_api(self, method, parts, query):
+            store = manager.replay
+            if method == 'GET' and parts == ['list']:
+                return self.send_json(200, {'bags': store.list()})
+            if method == 'POST' and parts == ['convert']:
+                # converting a bag takes a Pi core for ~1 min: never while a game can run
+                busy = [n for n, p in manager.profiles.items() if n.startswith('challenge') and p.info()['state'] == 'running']
+                if busy or manager.practice.game.state in ('countdown', 'running'):
+                    return self.send_json(400, {'error': 'Stop the challenge first (converting slows the robot)'})
+                try:
+                    store.convert(self.body_json().get('name'))
+                except ValueError as e:
+                    return self.send_json(400, {'error': str(e)})
+                return self.send_json(200, {'bags': store.list()})
+            if method == 'GET' and parts == ['game']:
+                try:
+                    return self.send_bytes(store.game(query.get('name', [''])[0]), 'application/json')
+                except ValueError as e:
+                    return self.send_json(404, {'error': str(e)})
+            if method == 'GET' and parts == ['mesh']:
+                try:
+                    with open(os.path.join(get_package_share_directory('ired_bringup'), 'meshes', 'ired_body.stl'), 'rb') as f:
+                        return self.send_bytes(f.read(), 'model/stl')
+                except Exception:
+                    return self.send_json(404, {'error': 'robot mesh not installed'})
+            return self.send_json(404, {'error': 'unknown replay endpoint'})
 
         def do_GET(self):
             if self.path.startswith('/api/'):
