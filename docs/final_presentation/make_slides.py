@@ -323,7 +323,7 @@ def aruco():
     cam = Image.open(f'{OUT}/aruco_camera_view.jpg').convert('RGB').resize((960, 720), Image.LANCZOS)
     d.rounded_rectangle([86, 226, 1050, 950], 8, outline=EDGE, width=4)
     im.paste(cam, (90, 230))
-    d.text((90, 975), 'Marker 121 (BS output side) read at 1.27 m, 2° · marker 122 (BS input side) on a far box at 3.57 m', fill=POWER, font=font(24, True))
+    d.text((90, 975), 'Marker 121 (BS output side) read at 0.82 m, 2.6° from the camera axis', fill=POWER, font=font(24, True))
     steps = [('1  Detect', 'grey image, OpenCV ArUco', 'DICT_ARUCO_ORIGINAL, ~9 frames/s'),
              ('2  Measure', 'solvePnP with our calibration', 'fx 999.5 px, marker 6.34 cm'),
              ('3  Name the box', 'ID pair: BS 121/122, CS1 101/102', 'even ID = input side, odd = output'),
@@ -379,3 +379,37 @@ def calibration():
 
 if __name__ == '__main__':
     calibration()
+
+
+def realworld():
+    im, d = slide('FROM THE LAB TO A REAL FACTORY', 'What our robot already proves, what changes outside the lab, and who would use it')
+    cols = [('WHAT CARRIES OVER', POWER, [
+                ('Find its own way', 'LiDAR + map (AMCL) keeps it within ~5 cm;', 'odometry alone drifts 4.5 % of distance'),
+                ('Identify stations', 'ArUco on each machine gives ID and side,', 'checked by a second view before acting'),
+                ('Take jobs from a server', 'RefBox over MQTT = a fleet manager', 'sending tasks, robot reports back'),
+                ('Omni base', 'drives sideways into tight spots', 'between machines, no turning space')]),
+            ('WHAT CHANGES OUTSIDE', DATA, [
+                ('People around it', 'safety-rated LiDAR + speed zones', '(ISO 3691-4), not only a STOP button'),
+                ('Bigger, changing floor', 'bigger map, docking markers at stations,', 'recover when pallets move'),
+                ('Long shifts', 'our 24 V 4 Ah pack is ~96 Wh: a shift needs', 'auto charging + battery level to the server'),
+                ('Light and Wi-Fi', 'camera needs even light; network can drop:', 'finish the task, then wait safely')]),
+            ('WHO USES IT', WIFI, [
+                ('Line operator', 'web app on a phone: start, stop, see', 'where the robot is and what it does'),
+                ('Maintenance', 'status page (CPU, temperature, wheels),', 'rosbag + 3D replay to find faults'),
+                ('Production planner', 'sends jobs through the fleet server,', 'robots move parts machine to machine'),
+                ('Next step', 'put the SCARA arm on top: our pose', '+ ArUco offset aligns the pick')])]
+    for i, (head, col, items) in enumerate(cols):
+        x = 90 + i * 590
+        d.text((x, 225), head, fill=col, font=font(24, True))
+        y = 270
+        for h, a, b in items:
+            d.rounded_rectangle([x, y, x + 560, y + 170], 10, fill=BOX, outline=EDGE, width=2)
+            d.text((x + 24, y + 20), h, fill=FG, font=font(27, True))
+            d.text((x + 24, y + 70), a, fill=(215, 215, 215), font=font(22))
+            d.text((x + 24, y + 106), b, fill=(215, 215, 215), font=font(22))
+            y += 186
+    im.save(f'{OUT}/slide_realworld.png')
+
+
+if __name__ == '__main__':
+    aruco(); realworld()
