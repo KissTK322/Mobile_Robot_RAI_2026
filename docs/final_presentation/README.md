@@ -9,6 +9,7 @@
 | `slide_bench.png` | bench tests and the same error numbers over 13 recorded real games |
 | `slide_performance.png` | Pi 5 CPU / temperature with each part running, camera and recording techniques (`pi_load.jsonl`) |
 | `slide_aruco.png` | live camera frame with the ArUco overlay (`aruco_camera_view.jpg`) and the five steps from marker to report |
+| `slide_calibration.png` | camera calibration images (`calib_grid.jpg`), result and the ArUco distance check |
 | `race_*_route.png` | robot path of the two race games (16 Nov 2026) |
 | `race_*_replay.mp4` | 2× top-down replay of the race games, made from the rosbags (no camera images were recorded) |
 | `race_eval.json`, `games_eval.json` | numbers behind the slides |

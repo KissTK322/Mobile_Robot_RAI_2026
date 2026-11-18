@@ -341,3 +341,41 @@ def aruco():
 
 if __name__ == '__main__':
     aruco()
+
+
+def calibration():
+    im, d = slide('CAMERA CALIBRATION', 'Logitech C270 at 640×480 · 9×6 chessboard on a rigid board · OpenCV calibrateCamera')
+    grid = Image.open(f'{OUT}/calib_grid.jpg').convert('RGB').resize((1020, 510), Image.LANCZOS)
+    d.rounded_rectangle([86, 226, 1110, 740], 8, outline=EDGE, width=4)
+    im.paste(grid, (90, 230))
+    d.text((90, 755), 'Some of the 76 board images, corners found automatically (coloured lines)', fill=MUTE, font=font(21))
+    res = [('Images', '72 to fit · 4 held out to check'), ('Reprojection error', '0.25 px  (held-out 0.18 px)'),
+           ('Focal length', 'fx 999.5 · fy 996.9 px'), ('Centre', 'cx 358.5 · cy 192.4 px'),
+           ('Distortion', 'k1 0.177 · k2 -0.038'), ('Field of view', '35.5° horizontal at 640×480')]
+    y = 226
+    d.text((1160, y), 'RESULT', fill=MUTE, font=font(22, True)); y += 40
+    for k, v in res:
+        d.text((1160, y), k, fill=(170, 170, 170), font=font(22))
+        d.text((1160, y + 30), v, fill=FG, font=font(26, True))
+        y += 76
+    d.text((1160, y + 6), 'Bent paper gave 0.7–1.0 px and an unstable fx,', fill=(200, 200, 200), font=font(21))
+    d.text((1160, y + 36), 'so we used a rigid board.', fill=(200, 200, 200), font=font(21))
+    # distance check
+    d.text((90, 805), 'DISTANCE CHECK (tape measure from the lens, marker upright)', fill=MUTE, font=font(22, True))
+    cols, ws = ['true distance', '50 cm', '100 cm', '150 cm'], [300, 190, 190, 190]
+    rows = [['before (marker 7 cm)', '54.4 cm', '111.0 cm', '164.8 cm'], ['after (size 6.34 cm)', '-', '100.3 cm', '-']]
+    x0, y = 90, 845
+    for j, c in enumerate(cols):
+        d.text((x0 + sum(ws[:j]), y), c, fill=MUTE, font=font(21, True))
+    for i, r in enumerate(rows):
+        y += 44
+        for j, c in enumerate(r):
+            d.text((x0 + sum(ws[:j]), y), c, fill=(POWER if i else FG) if j else (200, 200, 200), font=font(23, j > 0))
+    d.text((1000, 889), '10 % too far, the same at every distance:', fill=(200, 200, 200), font=font(22))
+    d.text((1000, 922), 'black square ~6.3 cm, not 7 cm. Size set to', fill=(200, 200, 200), font=font(22))
+    d.text((1000, 955), '7 / 1.104 = 6.34 cm: 100 cm reads 100.3 cm.', fill=POWER, font=font(22, True))
+    im.save(f'{OUT}/slide_calibration.png')
+
+
+if __name__ == '__main__':
+    calibration()
